@@ -42,7 +42,6 @@ export type Recorder = {
   copies: string[]
   toasts: string[]
   writes: { path: string; text: string }[]
-  reads: string[]
   commands: string[]
   opened: string[]
   closed: string[]
@@ -77,7 +76,7 @@ export function installWorld(on: On, world: World): Recorder {
   mock.env(on, { HOME: home, ...(world.env ?? {}) })
 
   const rec: Recorder = {
-    jevBodies: [], jevHeaders: [], jevUrls: [], haikuPrompts: [], fills: [], copies: [], toasts: [], writes: [], reads: [],
+    jevBodies: [], jevHeaders: [], jevUrls: [], haikuPrompts: [], fills: [], copies: [], toasts: [], writes: [],
     commands: [], opened: [], closed: [], files,
     draft: () => draft,
     setDraft: text => { draft = text },
@@ -108,7 +107,6 @@ export function installWorld(on: On, world: World): Recorder {
   }
 
   on('fs.read', (_, e) => {
-    rec.reads.push(JSON.stringify(e))
     const node = files[resolve(e.path)]
     return typeof node === 'string' ? { value: node } : { deny: `ENOENT: ${e.path}` }
   })
