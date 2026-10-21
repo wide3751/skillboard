@@ -1,0 +1,48 @@
+{
+  "name": "skillboard",
+  "version": "0.1.0",
+  "description": "Skills Pane：列出目前 session 可用的全部 skill，依 Source 分組，並以 TypeSafe Jev 針對每次 prompt 建議 skill。",
+  "author": {
+    "name": "Eric"
+  },
+  "repository": "https://github.com/wide3751/skillboard",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "jevApiKey": {
+      "type": "string",
+      "title": "Jev API key",
+      "description": "TypeSafe Jev 的 API key。留空就不做 Recommendation。",
+      "sensitive": true,
+      "required": false,
+      "default": ""
+    },
+    "threshold": {
+      "type": "number",
+      "title": "建議門檻",
+      "description": "Recommendation 顯示的最低機率（0 到 1）。",
+      "required": false,
+      "default": 0.1
+    },
+    "autoRecommend": {
+      "type": "boolean",
+      "title": "自動建議",
+      "description": "每次送出 prompt 時自動向 Jev 要建議。關掉後只在按「重新建議」時才送出。",
+      "required": false,
+      "default": true
+    },
+    "language": {
+      "type": "string",
+      "title": "介面語言",
+      "description": "auto 會自動偵測。",
+      "required": false,
+      "options": [
+        "auto",
+        "zh-TW",
+        "en",
+        "ja",
+        "zh-CN"
+      ],
+      "default": "auto"
+    }
+  }
+}

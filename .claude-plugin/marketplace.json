@@ -1,0 +1,14 @@
+{
+  "name": "skillboard",
+  "owner": {
+    "name": "wide3751"
+  },
+  "plugins": [
+    {
+      "name": "skillboard",
+      "source": "./",
+      "description": "Skills Pane：skill 目錄、Jev 建議、說明翻譯。"
+    }
+  ],
+  "description": "Skillboard：Claude Code 的 Skills Pane mod。"
+}
