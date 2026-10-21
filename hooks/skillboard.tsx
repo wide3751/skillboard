@@ -10,6 +10,8 @@ import { PANE_ID, project } from './view'
 import type { Lang, SkillboardOptions } from '../types'
 
 const COMMAND = 'skillboard'
+// Desktop sends the person's prompts as an SDK host, and Remote Control as a bridge.
+const PERSON_ORIGINS: readonly string[] = ['composer', 'bridge', 'sdk']
 const LANGS: readonly string[] = ['zh-TW', 'en', 'ja', 'zh-CN']
 
 function parseOptions(raw: PluginOptions): SkillboardOptions {
@@ -71,7 +73,7 @@ export const register: Register = (on, raw) => {
 
   on('prompt.submit', async ($, e, next) => {
     const entered = await next(e)
-    if (entered.drop !== undefined || e.command || e.isMeta || (e.origin && e.origin.kind !== 'composer')) return entered
+    if (entered.drop !== undefined || e.command || e.isMeta || (e.origin && !PERSON_ORIGINS.includes(e.origin.kind))) return entered
     if (roots) inBackground(afterSubmit($, roots, e.text, options))
     return entered
   })

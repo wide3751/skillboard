@@ -167,6 +167,18 @@ test('commands, hidden prompts and notifications are not sent to Jev', JEV, asyn
   expect(rec.jevBodies.map(b => b.state)).toEqual(['a real prompt'])
 })
 
+test('prompts the person sends from Desktop or Remote Control are sent to Jev', JEV, async ($, on) => {
+  const rec = installWorld(on, { ...SMALL, jev: jevAnswer(byName({ tdd: 0.9 })) })
+  await $.session.start({ cwd: CWD, surface: 'desktop', isInteractive: true })
+  await $.prompt.submit({ text: 'from desktop', wait: false, origin: { kind: 'sdk' } } as never)
+  await rec.settle()
+  await $.prompt.submit({ text: 'from phone', wait: false, origin: { kind: 'bridge' } } as never)
+  await rec.settle()
+  await $.prompt.submit({ text: 'from a peer', wait: false, origin: { kind: 'peer' } } as never)
+  await rec.settle()
+  expect(rec.jevBodies.map(b => b.state)).toEqual(['from desktop', 'from phone'])
+})
+
 test('with auto-recommend off only Re-suggest asks Jev, using the draft before any prompt', { options: { ...JEV.options, autoRecommend: false } }, async ($, on) => {
   const rec = installWorld(on, { ...SMALL, draft: '', jev: jevAnswer(byName({ grilling: 0.4 })) })
   await $.session.start({ cwd: CWD, surface: 'desktop', isInteractive: true })
