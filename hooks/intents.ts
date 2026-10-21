@@ -4,9 +4,9 @@ import type { EngineInterface, RenderSurface } from 'claude-code'
 import { changeBrowse, readBrowse } from './browse'
 import { readCatalog, refreshCatalog, type ScanRoots } from './catalog'
 import { fillSkill } from './fill'
-import { readLanguage, t } from './i18n'
+import { chooseLanguage, readLanguage, t } from './i18n'
 import { readRecommendation, recommend } from './recommend'
-import { readTranslations } from './translate'
+import { readTranslations, syncTranslations, translateSkill } from './translate'
 import { PANE_ID, keyOf, matchesQuery } from './view'
 import type { Intent, SkillCatalog, SkillEntry, SkillId, SkillboardOptions } from '../types'
 
@@ -28,7 +28,9 @@ export async function dispatch($: EngineInterface, intent: Intent, surface: Rend
       await changeBrowse($, intent)
       return
     case 'refresh':
-      if (roots) await refreshCatalog($, roots, true)
+      if (!roots) return
+      await refreshCatalog($, roots, true)
+      await syncTranslations($, roots.home, await readLanguage($))
       return
     case 'reveal': {
       const [catalog, translations, browse, lang] = await Promise.all([
@@ -54,8 +56,14 @@ export async function dispatch($: EngineInterface, intent: Intent, surface: Rend
       if (skill) await fillSkill($, skill.name, surface, t(await readLanguage($)))
       return
     }
-    case 'translate':
+    case 'translate': {
+      const skill = findSkill(await readCatalog($), intent.skillId)
+      if (skill && roots) await translateSkill($, roots.home, await readLanguage($), skill)
+      return
+    }
     case 'setLang':
+      await chooseLanguage($, intent.lang, ctx.options.language)
+      if (roots) await syncTranslations($, roots.home, intent.lang)
       return
   }
 }

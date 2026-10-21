@@ -1,11 +1,11 @@
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import { readBrowse } from './browse'
 import { readCatalog, refreshCatalog, type ScanRoots } from './catalog'
-import { readLanguage, t } from './i18n'
+import { readLanguage, resolveLanguage, t } from './i18n'
 import { dispatch, type DispatchContext } from './intents'
 import { paint } from './paint'
 import { clearRecommendation, readRecommendation, recommend, settleOrphanedRun } from './recommend'
-import { readTranslations } from './translate'
+import { readTranslations, syncTranslations } from './translate'
 import { PANE_ID, project } from './view'
 import type { Lang, SkillboardOptions } from '../types'
 
@@ -30,7 +30,14 @@ function inBackground(work: Promise<unknown>): void {
 /** A submitted prompt may follow a plugin install, so the catalog catches up before Jev ranks it. */
 async function afterSubmit($: EngineInterface, roots: ScanRoots, text: string, options: SkillboardOptions): Promise<void> {
   const catalog = await refreshCatalog($, roots, false)
+  await syncTranslations($, roots.home, await readLanguage($))
   if (options.autoRecommend) await recommend($, catalog, text, options.jevApiKey)
+}
+
+/** Opening retries a scan the listing was not ready for, and picks up hand edits to the Translation File. */
+async function afterOpen($: EngineInterface, roots: ScanRoots): Promise<void> {
+  if ((await readCatalog($)).status === 'pending') await refreshCatalog($, roots, false)
+  await syncTranslations($, roots.home, await readLanguage($))
 }
 
 export const register: Register = (on, raw) => {
@@ -43,7 +50,9 @@ export const register: Register = (on, raw) => {
     const scanRoots: ScanRoots = { cwd: started.cwd, home: (await $.env.get('HOME')) ?? '' }
     roots = scanRoots
     await settleOrphanedRun($)
-    const say = t(await readLanguage($))
+    const lang = await resolveLanguage($, options.language)
+    await syncTranslations($, scanRoots.home, lang)
+    const say = t(lang)
     await $.command.register({ name: COMMAND, description: say('commandDescription') })
     inBackground(refreshCatalog($, scanRoots, false))
     return started
@@ -56,7 +65,7 @@ export const register: Register = (on, raw) => {
       return { text: '' }
     }
     await $.ui.open({ id: PANE_ID, title: t(await readLanguage($))('paneTitle') })
-    if (roots && (await readCatalog($)).status === 'pending') inBackground(refreshCatalog($, roots, false))
+    if (roots) inBackground(afterOpen($, roots))
     return { text: '' }
   })
 

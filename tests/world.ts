@@ -49,6 +49,8 @@ export type Recorder = {
   files: Record<string, FsNode>
   /** The prompt box as the mod left it. */
   draft: () => string
+  /** A person editing a file by hand. */
+  edit: (path: string, text: string) => void
   /** The person typing into the prompt box. */
   setDraft: (text: string) => void
   /** Lets work the mod started without awaiting run to its end. */
@@ -79,6 +81,10 @@ export function installWorld(on: On, world: World): Recorder {
     commands: [], opened: [], closed: [], files,
     draft: () => draft,
     setDraft: text => { draft = text },
+    edit: (path, text) => {
+      files[path] = text
+      mtimes[path] = (mtimes[path] ?? 0) + 100
+    },
     settle: () => clock.settle(),
     advance: ms => clock.advance(ms),
     sleep: ms => clock.sleep(ms),

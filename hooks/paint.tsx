@@ -10,8 +10,10 @@ export type Dispatch = (intent: Intent, surface: RenderSurface) => void
 export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispatch: Dispatch) {
   const elements = $.ui.resolve(e)
   const { Box, Text, Button } = elements
-  const Input = 'Input' in elements ? elements.Input : null
-  const Select = 'Select' in elements ? elements.Select : null
+  // The mobile table answers Input and Select with stand-ins that draw nothing, so the surface decides.
+  const hasFields = e.surface !== 'mobile'
+  const Input = hasFields && 'Input' in elements ? elements.Input : null
+  const Select = hasFields && 'Select' in elements ? elements.Select : null
 
   const button = (action: Action, extra: { dimColor?: boolean } = {}) => (
     <Button key={action.key} label={action.label} {...extra} onPress={press => dispatch(action.intent, press.surface)} />
