@@ -8,6 +8,7 @@ import type {
   SourceGroup, TranslationsState,
 } from '../types'
 
+export const PANE_ID = 'skillboard'
 export const INLINE_WINDOW_ROWS = 6
 export const LANG_SELECT_KEY = 'lang'
 

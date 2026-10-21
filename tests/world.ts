@@ -26,7 +26,7 @@ export type World = {
   settingsLanguage?: string
   env?: { LANG?: string; LC_ALL?: string }
   store?: Record<string, unknown>
-  jev?: (body: JevBody) => JevReply
+  jev?: (body: JevBody, call: number) => JevReply | Promise<JevReply>
   haiku?: (prompt: string, system: string) => string | 'api-error'
   draft?: string
   fillRefusal?: 'no_composer' | 'dialog'
@@ -36,21 +36,26 @@ export type World = {
 export type Recorder = {
   jevBodies: JevBody[]
   jevHeaders: Record<string, string>[]
+  jevUrls: string[]
   haikuPrompts: string[]
   fills: string[]
   copies: string[]
   toasts: string[]
   writes: { path: string; text: string }[]
   reads: string[]
-  scrolls: unknown[]
   commands: string[]
   opened: string[]
   closed: string[]
   files: Record<string, FsNode>
   /** The prompt box as the mod left it. */
   draft: () => string
+  /** The person typing into the prompt box. */
+  setDraft: (text: string) => void
   /** Lets work the mod started without awaiting run to its end. */
   settle: () => Promise<void>
+  /** Moves the mocked clock, releasing stand-ins waiting on `sleep`. */
+  advance: (ms: number) => Promise<void>
+  sleep: (ms: number) => Promise<void>
   /** Changes the session's skill listing, as installing a plugin mid-session does. */
   setUsage: (usage: readonly ContextSkill[] | null) => void
 }
@@ -70,10 +75,13 @@ export function installWorld(on: On, world: World): Recorder {
   mock.env(on, { HOME: home, ...(world.env ?? {}) })
 
   const rec: Recorder = {
-    jevBodies: [], jevHeaders: [], haikuPrompts: [], fills: [], copies: [], toasts: [], writes: [], reads: [], scrolls: [],
+    jevBodies: [], jevHeaders: [], jevUrls: [], haikuPrompts: [], fills: [], copies: [], toasts: [], writes: [], reads: [],
     commands: [], opened: [], closed: [], files,
     draft: () => draft,
+    setDraft: text => { draft = text },
     settle: () => clock.settle(),
+    advance: ms => clock.advance(ms),
+    sleep: ms => clock.sleep(ms),
     setUsage: next => { usage = next },
   }
 
@@ -185,16 +193,14 @@ export function installWorld(on: On, world: World): Recorder {
   on('ui.panes', () => ({
     value: [...shown].map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })),
   }))
-  on('ui.scroll', (_, e) => {
-    rec.scrolls.push(e)
-    return {}
-  })
-  on('http.fetch', (_, e) => {
+  on('ui.scroll', () => ({}))
+  on('http.fetch', async (_, e) => {
     const body = JSON.parse(e.init?.body ?? '{}') as JevBody
     rec.jevBodies.push(body)
+    rec.jevUrls.push(e.url)
     rec.jevHeaders.push(e.init?.headers ?? {})
     if (!world.jev) throw new Error(`unexpected fetch of ${e.url}`)
-    const reply = world.jev(body)
+    const reply = await world.jev(body, rec.jevBodies.length)
     if (reply === 'network-error') return { deny: 'network error' }
     return { value: { status: reply.status, ok: reply.status < 400, headers: {}, text: JSON.stringify(reply.json) } }
   })
@@ -211,22 +217,24 @@ export function installWorld(on: On, world: World): Recorder {
   return rec
 }
 
-/** Answers Jev from a scoring function over each question's criteria. */
-export function jevScoring(score: (criterion: string) => number) {
+/** Answers every question of a Jev request with the probability `score` gives each criterion's text. */
+export function jevAnswer(score: (criterion: string) => number) {
   return (body: JevBody): JevReply => ({
     status: 200,
     json: {
       answers: Object.fromEntries(
         Object.entries(body.questions).map(([id, q]) => {
-          const raw = Object.entries(q.criteria).map(([label, text]) => [label, score(text)] as const)
-          const sum = raw.reduce((s, [, p]) => s + p, 0) || 1
-          const probabilities = Object.fromEntries(raw.map(([label, p]) => [label, p / sum]))
-          return [id, { choice: raw[0]?.[0], confidence: 1, probabilities }]
+          const probabilities = Object.fromEntries(Object.entries(q.criteria).map(([label, text]) => [label, score(text)]))
+          return [id, { choice: Object.keys(probabilities)[0], confidence: 1, probabilities }]
         }),
       ),
     },
   })
 }
+
+/** The probability a stand-in gives a skill, by the name its criterion starts with. */
+export const byName = (probabilities: Record<string, number>) => (criterion: string) =>
+  probabilities[criterion.split(':')[0]!] ?? 0
 
 export const PANE = { plugin: 'skillboard', component: 'Pane', requestId: 'skillboard' } as const
 
@@ -263,4 +271,33 @@ export async function screen(ui: { drawn: () => Promise<unknown> }): Promise<str
     }
   }
   return lines((await ui.drawn()) as Node).join('\n')
+}
+
+/** A prompt as the person submits it at the composer. */
+export const typed = (text: string) => ({ text, wait: false, origin: { kind: 'composer' as const } })
+
+/** A small machine: one plugin from two marketplaces, an older user-level copy of tdd, and a project skill. */
+export const SMALL: World = {
+  files: {
+    [`${HOME}/.claude/plugins/installed_plugins.json`]: JSON.stringify({
+      version: 2,
+      plugins: {
+        'mattpocock-skills@mattpocock': [{ scope: 'user', installPath: '/cache/mp/1.3.1', version: '1.3.1' }],
+      },
+    }),
+    '/cache/mp/1.3.1/skills/tdd/SKILL.md': skillMd('Test-driven development'),
+    '/cache/mp/1.3.1/skills/grilling/SKILL.md': skillMd('Grill the user about a plan'),
+    '/cache/mp/1.3.1/skills/diagnose/SKILL.md': skillMd('Diagnose hard bugs'),
+    [`${HOME}/.claude/skills/tdd`]: { link: '/git/mp/skills/tdd' },
+    '/git/mp/skills/tdd/SKILL.md': skillMd('Old TDD'),
+    '/git/mp/.claude-plugin/plugin.json': JSON.stringify({ version: '1.2.0' }),
+    [`${CWD}/.claude/skills/deploy/SKILL.md`]: skillMd('Deploys this project'),
+  },
+  usage: [
+    { name: 'mattpocock-skills:tdd', source: 'plugin', pluginName: 'mattpocock-skills', tokens: 1 },
+    { name: 'mattpocock-skills:grilling', source: 'plugin', pluginName: 'mattpocock-skills', tokens: 1 },
+    { name: 'mattpocock-skills:diagnose', source: 'plugin', pluginName: 'mattpocock-skills', tokens: 1 },
+    { name: 'tdd', source: 'userSettings', tokens: 1 },
+    { name: 'deploy', source: 'projectSettings', tokens: 1 },
+  ],
 }
