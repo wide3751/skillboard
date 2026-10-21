@@ -15,7 +15,7 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
   const Input = hasFields && 'Input' in elements ? elements.Input : null
   const Select = hasFields && 'Select' in elements ? elements.Select : null
 
-  const button = (action: Action, extra: { dimColor?: boolean } = {}) => (
+  const button = (action: Action, extra: { dimColor?: boolean; variant?: 'primary' | 'secondary' } = {}) => (
     <Button key={action.key} label={action.label} {...extra} onPress={press => dispatch(action.intent, press.surface)} />
   )
 
@@ -27,9 +27,9 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
     ) : (
       <Box flexDirection="column">
         <Button key={p.key} plain dimColor={isDim} onPress={press => dispatch(p.intent, press.surface)}>
-          {p.name} <Text dimColor>{p.percent}</Text>
+          {p.name} <Text color="success" bold>{p.percent}</Text>
         </Button>
-        <Text dimColor>  {p.detail}</Text>
+        <Text dimColor wrap="truncate-end">  {p.detail}</Text>
       </Box>
     )
 
@@ -45,16 +45,26 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
       body.kind === 'running' ? <Text dimColor>{body.text}</Text>
       : body.kind === 'message' ? <Text dimColor>{body.text}</Text>
       : null
+    const heading = (
+      <Box flexDirection="row" gap={1}>
+        <Text bold color={model.layout === 'dock' ? 'claude' : undefined}>{r.heading}</Text>
+        {button(r.rerun, { dimColor: r.rerun.isDim })}
+      </Box>
+    )
+    if (model.layout === 'inline') {
+      return (
+        <Box flexDirection="column">
+          {heading}
+          {line}
+          <Box flexDirection="row" gap={2}>{picks}</Box>
+        </Box>
+      )
+    }
     return (
-      <Box flexDirection="column" marginBottom={model.layout === 'dock' ? 1 : 0}>
-        <Box flexDirection="row" gap={1}>
-          <Text bold>{r.heading}</Text>
-          {button(r.rerun, { dimColor: r.rerun.isDim })}
-        </Box>
+      <Box flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1} marginBottom={1}>
+        {heading}
         {line}
-        <Box flexDirection={model.layout === 'inline' ? 'row' : 'column'} gap={model.layout === 'inline' ? 2 : 0}>
-          {picks}
-        </Box>
+        <Box flexDirection="column">{picks}</Box>
       </Box>
     )
   }
@@ -62,32 +72,42 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
   const toolbar = () => {
     const { search, refresh, all, language } = model.toolbar
     const onSearch = (value: string, surface: RenderSurface) => dispatch({ kind: 'search', query: value }, surface)
+    const input = Input && (
+      <Input
+        key={search.key}
+        placeholder={search.placeholder}
+        value={search.value}
+        onInput={(value, ev) => onSearch(value, ev.surface)}
+        onSubmit={(value, ev) => onSearch(value, ev.surface)}
+      />
+    )
+    const controls = [
+      refresh && button(refresh),
+      all && button(all),
+      language && (Select ? (
+        <Select
+          key={LANG_SELECT_KEY}
+          label={language.label}
+          value={language.value}
+          options={language.options.map(o => ({ value: o.lang, label: o.label }))}
+          onSelect={(value, ev) => dispatch({ kind: 'setLang', lang: value as Lang }, ev.surface)}
+        />
+      ) : (
+        language.options.map(o => button(o.action, { dimColor: o.lang !== language.value }))
+      )),
+    ]
+    if (model.layout === 'dock') {
+      return (
+        <Box flexDirection="row" gap={1} flexWrap="wrap" alignItems="center" marginBottom={1}>
+          {input && <Box flexGrow={1} minWidth={20}>{input}</Box>}
+          {controls}
+        </Box>
+      )
+    }
     return (
       <Box flexDirection="column">
-        {Input && (
-          <Input
-            key={search.key}
-            placeholder={search.placeholder}
-            value={search.value}
-            onInput={(value, ev) => onSearch(value, ev.surface)}
-            onSubmit={(value, ev) => onSearch(value, ev.surface)}
-          />
-        )}
-        <Box flexDirection="row" gap={1} flexWrap="wrap">
-          {refresh && button(refresh)}
-          {all && button(all)}
-          {language && (Select ? (
-            <Select
-              key={LANG_SELECT_KEY}
-              label={language.label}
-              value={language.value}
-              options={language.options.map(o => ({ value: o.lang, label: o.label }))}
-              onSelect={(value, ev) => dispatch({ kind: 'setLang', lang: value as Lang }, ev.surface)}
-            />
-          ) : (
-            language.options.map(o => button(o.action, { dimColor: o.lang !== language.value }))
-          ))}
-        </Box>
+        {input}
+        <Box flexDirection="row" gap={1} flexWrap="wrap">{controls}</Box>
       </Box>
     )
   }
@@ -100,10 +120,10 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
       {d.badge && <Text color="yellow">● {d.badge}</Text>}
       {d.status && <Text dimColor>{d.status}</Text>}
       <Box flexDirection="row" gap={1}>
-        {d.translate && button(d.translate)}
-        {d.toggleOriginal && button(d.toggleOriginal)}
-        {button(d.fill)}
-        {button(d.hide)}
+        {d.translate && button(d.translate, { variant: 'secondary' })}
+        {d.toggleOriginal && button(d.toggleOriginal, { variant: 'secondary' })}
+        {button(d.fill, { variant: 'primary' })}
+        {button(d.hide, { variant: 'secondary' })}
       </Box>
     </Box>
   )
@@ -114,14 +134,25 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
         <Text dimColor>{`  ${s.isExpanded ? '▾' : '·'} `}</Text>
         <Text bold={s.isExpanded} dimColor={s.isHidden}>{s.name}</Text>
       </Button>
+      {s.summary && (
+        <Box paddingLeft={4}>
+          <Text dimColor wrap="truncate-end">{s.summary}</Text>
+        </Box>
+      )}
       {s.detail && detail(s.detail)}
     </Box>
   )
 
   const groupHeader = (g: GroupModel) => (
-    <Button key={g.key} plain onPress={press => dispatch(g.intent, press.surface)}>
-      <Text bold color="claude">{`${g.isOpen ? '▾' : '▸'} ${g.title}`}</Text> <Text dimColor>{g.version === null ? g.count : `${g.version} · ${g.count}`}</Text>
-    </Button>
+    <Box flexDirection="row" justifyContent="space-between">
+      <Button
+        key={g.key}
+        variant="secondary"
+        label={`${g.isOpen ? '▾' : '▸'} ${g.title}`}
+        onPress={press => dispatch(g.intent, press.surface)}
+      />
+      <Text dimColor>{g.version === null ? g.count : `${g.version} · ${g.count}`}</Text>
+    </Box>
   )
 
   const catalog = () => {

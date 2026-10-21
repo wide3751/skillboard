@@ -122,6 +122,27 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
+test('each skill row carries the first sentence of its description, cut to the pane width', async ($, on) => {
+  const long = 'Grill the user about every plan they bring, one question at a time, until nothing is vague. Then stop.'
+  const rec = installWorld(on, { ...WORLD, files: { ...WORLD.files, '/cache/mp-a/1.3.1/skills/grilling/SKILL.md': skillMd(long) } })
+  await $.session.start({ cwd: CWD, surface: 'terminal', isInteractive: true })
+  await rec.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: paneProps('dock') })
+  await ui.press({ key: 'group:plugin:mattpocock-skills' })
+  const below = async (row: string) => {
+    const lines = (await screen(ui)).split('\n')
+    return lines[lines.indexOf(row) + 1]
+  }
+  expect((await screen(ui)).split('\n')).toContain('▾ mattpocock-skills 1.3.1 · 2')
+  expect(await below('  · tdd')).toBe('Test-driven development with red-green-refactor')
+  expect(await below('  · grilling')).toBe('Grill the user about every plan they bring, one questio…')
+  expect([...(await below('  · grilling'))!]).toHaveLength(60 - 4)
+
+  await ui.press({ key: 'skill:plugin:mattpocock-skills|mattpocock-skills:tdd' })
+  expect(await below('  ▾ tdd')).toBe('/mattpocock-skills:tdd · 1.3.1')
+  await ui.unmount()
+})
+
 test('skills typed only as /name join their group; commands and /skillboard stay out', async ($, on) => {
   const rec = installWorld(on, {
     ...WORLD,

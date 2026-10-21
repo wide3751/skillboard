@@ -21,7 +21,7 @@ for (const { name, option, world, search } of cases) {
     await $.session.start({ cwd: CWD, surface: 'desktop', isInteractive: true })
     await rec.settle()
     const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: paneProps('dock') })
-    expect((await screen(ui)).split('\n')[0]).toBe(`[? ${search}]`)
+    expect((await screen(ui)).split('\n')[0]!.split(']')[0]).toBe(`[? ${search}`)
     await ui.unmount()
   })
 }

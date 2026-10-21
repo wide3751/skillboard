@@ -15,11 +15,11 @@ for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface, props: paneProps(placement) })
       const lines = (await screen(ui)).split('\n')
       const hasSearch = surface !== 'mobile'
-      expect(lines.includes('[? Search skills]')).toBe(hasSearch)
       if (placement === 'dock') {
         expect(lines).toEqual(expect.arrayContaining(['tdd 62%', '  mattpocock-skills 1.3.1 · +1 more Sources', '▸ Project 1']))
-        expect(lines.some(l => l.startsWith('Refresh'))).toBe(true)
+        expect(lines.some(l => l.startsWith(hasSearch ? '[? Search skills] Refresh <en>' : 'Refresh'))).toBe(true)
       } else {
+        expect(lines.includes('[? Search skills]')).toBe(hasSearch)
         expect(lines).toContain('tdd 62% grilling 20%')
         expect(lines).toContain('All')
         expect(lines.some(l => l.startsWith('▸'))).toBe(false)

@@ -82,7 +82,15 @@ export type GroupModel = Action & {
   skills: readonly SkillModel[]
 }
 
-export type SkillModel = Action & { row: 'skill'; name: string; isHidden: boolean; isExpanded: boolean; detail: DetailModel | null }
+export type SkillModel = Action & {
+  row: 'skill'
+  name: string
+  /** The description's first sentence, cut to one line; null when expanded, inline, or with no description. */
+  summary: string | null
+  isHidden: boolean
+  isExpanded: boolean
+  detail: DetailModel | null
+}
 
 export type DetailModel = {
   meta: string
@@ -106,7 +114,7 @@ export type Snapshot = {
   lang: Lang
 }
 
-export type ProjectOptions = { hasJev: boolean; threshold: number }
+export type ProjectOptions = { hasJev: boolean; threshold: number; columns: number }
 
 const LANG_NAMES: Record<Lang, string> = { 'zh-TW': '繁體中文', en: 'English', ja: '日本語', 'zh-CN': '简体中文' }
 const LANGS = Object.keys(LANG_NAMES) as Lang[]
@@ -114,7 +122,7 @@ const LANGS = Object.keys(LANG_NAMES) as Lang[]
 export function project(s: Snapshot, placement: 'dock' | 'inline', options: ProjectOptions): PaneModel {
   const say = t(s.lang)
   const translations = s.translations.lang === s.lang ? s.translations : null
-  const catalog = projectCatalog(s, translations, placement, say)
+  const catalog = projectCatalog(s, translations, placement, options.columns, say)
   return {
     layout: placement,
     recommendation: options.hasJev ? projectRecommendation(s, options.threshold, say) : null,
@@ -189,11 +197,15 @@ function failureText(failure: JevFailure, say: Say): string {
   }
 }
 
-function projectCatalog(s: Snapshot, translations: TranslationsState | null, placement: 'dock' | 'inline', say: Say): CatalogModel {
+function projectCatalog(
+  s: Snapshot, translations: TranslationsState | null, placement: 'dock' | 'inline', columns: number, say: Say,
+): CatalogModel {
   if (s.catalog.status === 'pending') return { kind: 'message', text: say('catalogPending') }
   const query = s.browse.query.trim()
   if (placement === 'inline' && !s.browse.inlineShowAll && query === '') return { kind: 'hidden' }
-  const groups = projectGroups(s.catalog.groups, s.browse, s.hidden, translations, say)
+  // The inline window counts rows, so a summary line under each would halve what it shows.
+  const summaryWidth = placement === 'dock' ? columns - SUMMARY_INDENT : null
+  const groups = projectGroups(s.catalog.groups, s.browse, s.hidden, translations, summaryWidth, say)
   if (groups.length === 0) {
     if (query !== '') return { kind: 'message', text: say('noResult', { q: query }) }
     // Every skill hidden: nothing to draw above the 顯示已隱藏 toggle.
@@ -211,7 +223,8 @@ function projectCatalog(s: Snapshot, translations: TranslationsState | null, pla
 }
 
 function projectGroups(
-  groups: readonly SourceGroup[], browse: BrowseState, hidden: readonly SkillId[], translations: TranslationsState | null, say: Say,
+  groups: readonly SourceGroup[], browse: BrowseState, hidden: readonly SkillId[], translations: TranslationsState | null,
+  summaryWidth: number | null, say: Say,
 ): GroupModel[] {
   const query = browse.query.trim()
   return groups.flatMap(g => {
@@ -219,7 +232,7 @@ function projectGroups(
     const hits = query === '' ? shown : shown.filter(entry => matchesQuery(entry, g.source, query, translations))
     if (hits.length === 0) return []
     const isOpen = query === '' ? browse.opened.includes(g.source.id) : !browse.shutWhileSearching.includes(g.source.id)
-    return [projectGroup(g, shown, hits, isOpen, query !== '', browse, hidden, translations, say)]
+    return [projectGroup(g, shown, hits, isOpen, query !== '', browse, hidden, translations, summaryWidth, say)]
   })
 }
 
@@ -232,14 +245,14 @@ function flatten(groups: readonly GroupModel[]): (GroupModel | SkillModel)[] {
 export function inlineOffsetFor(s: Snapshot, skillId: SkillId): number {
   if (s.catalog.status !== 'ready') return 0
   const translations = s.translations.lang === s.lang ? s.translations : null
-  const rows = flatten(projectGroups(s.catalog.groups, s.browse, s.hidden, translations, t(s.lang)))
+  const rows = flatten(projectGroups(s.catalog.groups, s.browse, s.hidden, translations, null, t(s.lang)))
   const at = rows.findIndex(row => row.row === 'skill' && row.intent.kind === 'toggleSkill' && row.intent.skillId === skillId)
   return Math.max(0, at - 1)
 }
 
 function projectGroup(
   g: SourceGroup, shown: readonly SkillEntry[], hits: readonly SkillEntry[], isOpen: boolean, isSearching: boolean, browse: BrowseState,
-  hidden: readonly SkillId[], translations: TranslationsState | null, say: Say,
+  hidden: readonly SkillId[], translations: TranslationsState | null, summaryWidth: number | null, say: Say,
 ): GroupModel {
   const title = sourceTitle(g.source, say)
   const version = g.source.kind === 'plugin' ? formatVersion(newest(g.source.installs.map(i => i.version))) : null
@@ -250,18 +263,21 @@ function projectGroup(
     version,
     count: isSearching ? `${hits.length}/${shown.length}` : `${shown.length}`,
     isOpen,
-    skills: isOpen ? hits.map(entry => projectSkill(entry, hidden.includes(entry.id), browse, translations, say)) : [],
+    skills: isOpen ? hits.map(entry => projectSkill(entry, hidden.includes(entry.id), browse, translations, summaryWidth, say)) : [],
   }
 }
 
 function projectSkill(
-  entry: SkillEntry, isHidden: boolean, browse: BrowseState, translations: TranslationsState | null, say: Say,
+  entry: SkillEntry, isHidden: boolean, browse: BrowseState, translations: TranslationsState | null, summaryWidth: number | null,
+  say: Say,
 ): SkillModel {
   const isExpanded = browse.expanded === entry.id
+  const description = shownDescription(entry, browse, translations)
   return {
     ...act({ kind: 'toggleSkill', skillId: entry.id }, entry.baseName),
     row: 'skill',
     name: entry.baseName,
+    summary: isExpanded || summaryWidth === null || description === '' ? null : fitCells(firstSentence(description), summaryWidth),
     isHidden,
     isExpanded,
     detail: isExpanded ? projectDetail(entry, isHidden, browse, translations, say) : null,
@@ -291,6 +307,38 @@ function projectDetail(
     fill: act({ kind: 'fill', skillId: entry.id }, say('fill')),
     hide: isHidden ? act({ kind: 'unhide', skillId: entry.id }, say('unhide')) : act({ kind: 'hide', skillId: entry.id }, say('hide')),
   }
+}
+
+/** The translation unless the person flipped to the original; the original otherwise. */
+function shownDescription(entry: SkillEntry, browse: BrowseState, translations: TranslationsState | null): string {
+  const translation = translations?.entries[translationKeyOf(entry)]
+  return translation !== undefined && !browse.showingOriginal.includes(entry.id) ? translation.text : entry.description
+}
+
+/** Lines up under the name after the row's `  · `. */
+const SUMMARY_INDENT = 4
+
+function firstSentence(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return flat.match(/^.*?(?:[.!?](?=\s|$)|[。！？]|$)/)?.[0] ?? flat
+}
+
+// East Asian wide ranges take two cells; enough for the scripts the Translation File holds.
+const WIDE = /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/
+
+const cellsOf = (ch: string) => (WIDE.test(ch) ? 2 : 1)
+
+/** Cut to `width` terminal cells with an ellipsis, for a surface that wraps rather than truncates. */
+function fitCells(text: string, width: number): string {
+  if ([...text].reduce((n, ch) => n + cellsOf(ch), 0) <= width) return text
+  let used = 1
+  let out = ''
+  for (const ch of text) {
+    if (used + cellsOf(ch) > width) break
+    used += cellsOf(ch)
+    out += ch
+  }
+  return `${out}…`
 }
 
 function sourceTitle(source: Source, say: Say): string {

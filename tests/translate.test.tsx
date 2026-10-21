@@ -34,6 +34,11 @@ for (const surface of SURFACES) {
     expect(text).not.toContain('翻譯 原文')
     expect(text).toContain('原文 填入')
 
+    await ui.press({ key: `skill:${TDD}` })
+    const lines = (await screen(ui)).split('\n')
+    expect(lines[lines.indexOf('  · tdd') + 1]).toBe('測試驅動開發')
+
+    await ui.press({ key: `skill:${TDD}` })
     await ui.press({ key: `original:${TDD}` })
     expect(await screen(ui)).toContain('Test-driven development')
     await ui.unmount()

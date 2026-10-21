@@ -23,6 +23,20 @@ async function isDim(ui: { drawn: () => Promise<unknown> }, name: string): Promi
   return find((await ui.drawn()) as Node)
 }
 
+/** The variant of the Button pressed by `key`: which of the detail's buttons the surface marks as the one to press. */
+async function variantOf(ui: { drawn: () => Promise<unknown> }, key: string): Promise<unknown> {
+  const find = (node: Node): Record<string, unknown> | undefined => {
+    if (node === null || node === undefined || typeof node === 'string') return undefined
+    if (node.type === 'Button' && node.props?.key === key) return node.props
+    for (const child of node.children ?? []) {
+      const found = find(child as Node)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  return find((await ui.drawn()) as Node)?.variant
+}
+
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`隱藏 takes a skill out of its group and 顯示已隱藏 brings it back dimmed (${surface})`, ZH, async ($, on) => {
     const rec = installWorld(on, SMALL)
@@ -34,6 +48,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.press({ key: 'group:plugin:mattpocock-skills' })
     await ui.press({ key: `skill:${PLUGIN_TDD}` })
     expect(await screen(ui)).toContain('翻譯 填入 隱藏')
+    expect(await variantOf(ui, `fill:${PLUGIN_TDD}`)).toBe('primary')
+    expect(await variantOf(ui, `hide:${PLUGIN_TDD}`)).toBe('secondary')
     await ui.press({ key: `hide:${PLUGIN_TDD}` })
     let text = await screen(ui)
     expect(headers(text)).toContain('▾ mattpocock-skills 1.3.1 · 2')

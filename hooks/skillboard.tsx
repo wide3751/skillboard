@@ -92,6 +92,7 @@ export const register: Register = (on, raw) => {
     const model = project({ catalog, recommendation, translations, browse, hidden, lang }, e.props.placement, {
       hasJev: options.jevApiKey !== '',
       threshold: options.threshold,
+      columns: e.props.bodyColumns,
     })
     return paint($, e, model, (intent, surface) => inBackground(dispatch($, intent, surface, ctx)))
   })
