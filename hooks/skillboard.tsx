@@ -64,11 +64,11 @@ export const register: Register = (on, raw) => {
     const isShown = (await $.ui.panes()).some(p => p.id === PANE_ID && p.isShown)
     if (isShown) {
       await $.ui.close({ id: PANE_ID })
-      return { text: '' }
+      return {}
     }
     await $.ui.open({ id: PANE_ID, title: t(await readLanguage($))('paneTitle') })
     if (roots) inBackground(afterOpen($, roots))
-    return { text: '' }
+    return {}
   })
 
   on('prompt.submit', async ($, e, next) => {

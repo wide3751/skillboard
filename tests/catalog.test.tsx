@@ -182,11 +182,12 @@ test('the catalog shows a loading line until the listing is ready, then catches 
   await ui.unmount()
 })
 
-test('/skillboard opens the pane and closes it again', async ($, on) => {
+test('/skillboard opens the pane and closes it again, leaving no output line', async ($, on) => {
   const rec = installWorld(on, WORLD)
   await $.session.start({ cwd: CWD, surface: 'terminal', isInteractive: true })
-  await $.command.run({ command: 'skillboard', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } } as never)
-  await $.command.run({ command: 'skillboard', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } } as never)
+  const run = () => $.command.run({ command: 'skillboard', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } } as never)
+  expect((await run()).text).toBeUndefined()
+  expect((await run()).text).toBeUndefined()
   expect(rec.opened).toEqual(['skillboard'])
   expect(rec.closed).toEqual(['skillboard'])
 })
