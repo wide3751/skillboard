@@ -17,7 +17,7 @@ _Avoid_: 推薦清單、Suggestion
 _Avoid_: Skill 清單、Skills 列表
 
 **Source**:
-提供某個 skill 的地方：某個 plugin（及其版本）、使用者層、專案層或內建。
+提供某個 skill 的地方：某個 plugin（以 plugin 名稱識別，附版本）、使用者層、專案層或內建。同名 plugin 從多個 marketplace 安裝時，session 只載入一份，所以仍是同一個 Source。
 _Avoid_: 出處、provider
 
 **Translation File**:
