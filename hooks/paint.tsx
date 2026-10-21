@@ -110,7 +110,8 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
   const skill = (s: SkillModel) => (
     <Box flexDirection="column">
       <Button key={s.key} plain onPress={press => dispatch(s.intent, press.surface)}>
-        {`  ${s.isExpanded ? '▾' : '·'} ${s.name}`}
+        <Text dimColor>{`  ${s.isExpanded ? '▾' : '·'} `}</Text>
+        <Text bold={s.isExpanded}>{s.name}</Text>
       </Button>
       {s.detail && detail(s.detail)}
     </Box>
@@ -118,7 +119,7 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
 
   const groupHeader = (g: GroupModel) => (
     <Button key={g.key} plain onPress={press => dispatch(g.intent, press.surface)}>
-      {`${g.isOpen ? '▾' : '▸'} ${g.title}`} <Text dimColor>{g.version === null ? g.count : `${g.version} · ${g.count}`}</Text>
+      <Text bold color="claude">{`${g.isOpen ? '▾' : '▸'} ${g.title}`}</Text> <Text dimColor>{g.version === null ? g.count : `${g.version} · ${g.count}`}</Text>
     </Button>
   )
 
@@ -131,7 +132,7 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
         return (
           <Box flexDirection="column">
             {c.groups.map(g => (
-              <Box flexDirection="column">
+              <Box flexDirection="column" marginBottom={g.isOpen ? 1 : 0}>
                 {groupHeader(g)}
                 {g.skills.map(skill)}
               </Box>
