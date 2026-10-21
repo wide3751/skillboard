@@ -31,7 +31,8 @@ export type World = {
   appleLanguages?: readonly string[]
   store?: Record<string, unknown>
   jev?: (body: JevBody, call: number) => JevReply | Promise<JevReply>
-  haiku?: (prompt: string, system: string) => string | 'api-error'
+  /** May wait on `sleep`, so a test can hold calls in flight until it advances the clock. */
+  haiku?: (prompt: string, system: string) => string | Promise<string>
   draft?: string
   fillRefusal?: 'no_composer' | 'dialog'
   clipboard?: 'ok' | 'no-clipboard'
@@ -237,11 +238,11 @@ export function installWorld(on: On, world: World): Recorder {
     if (reply === 'network-error') return { deny: 'network error' }
     return { value: { status: reply.status, ok: reply.status < 400, headers: {}, text: JSON.stringify(reply.json) } }
   })
-  on('model.complete', (_, e) => {
+  on('model.complete', async (_, e) => {
     rec.haikuPrompts.push(e.prompt)
     if (!world.haiku) throw new Error('unexpected model.complete')
     const usage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
-    const text = world.haiku(e.prompt, e.system ?? '')
+    const text = await world.haiku(e.prompt, e.system ?? '')
     if (text === 'api-error') {
       return { value: { isAnswered: false, reason: 'api-error', status: 500, error: 'api_error', usage } as never }
     }

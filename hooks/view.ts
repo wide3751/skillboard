@@ -2,7 +2,7 @@
 // values. paint.tsx only maps the result onto a surface's elements.
 import { formatVersion, newest } from './catalog'
 import { t, type Say } from './i18n'
-import { translationKeyOf } from './translate'
+import { translationKeyOf, untranslated } from './translate'
 import type {
   BrowseState, Intent, JevFailure, Lang, RecommendationPick, RecommendationState, SkillCatalog, SkillEntry, SkillId, Source,
   SourceGroup, TranslationsState,
@@ -25,6 +25,7 @@ export function keyOf(intent: Intent): string {
     case 'refresh': return 'refresh'
     case 'rerun': return 'rerun'
     case 'translate': return `translate:${intent.skillId}`
+    case 'translateGroup': return `translateGroup:${intent.sourceId}`
     case 'fill': return `fill:${intent.skillId}`
     case 'setLang': return `lang:${intent.lang}`
     case 'hide': return `hide:${intent.skillId}`
@@ -71,7 +72,7 @@ export type CatalogModel =
   | { kind: 'hidden' }
   | { kind: 'message'; text: string }
   | { kind: 'groups'; groups: readonly GroupModel[] }
-  | { kind: 'window'; rows: readonly (GroupModel | SkillModel)[]; up: Action | null; down: Action | null }
+  | { kind: 'window'; rows: readonly (GroupModel | BatchModel | SkillModel)[]; up: Action | null; down: Action | null }
 
 export type GroupModel = Action & {
   row: 'group'
@@ -79,8 +80,13 @@ export type GroupModel = Action & {
   version: string | null
   count: string
   isOpen: boolean
+  /** The open group's first row: 翻譯此分類 or its progress; null when nothing is left to translate. */
+  batch: BatchModel | null
   skills: readonly SkillModel[]
 }
+
+/** Pressing it mid-run is a no-op, so the label alone carries the progress. */
+export type BatchModel = Action & { row: 'batch'; failure: string | null }
 
 export type SkillModel = Action & {
   row: 'skill'
@@ -236,9 +242,9 @@ function projectGroups(
   })
 }
 
-/** The inline window's rows: each group's header followed by its open skills. */
-function flatten(groups: readonly GroupModel[]): (GroupModel | SkillModel)[] {
-  return groups.flatMap(g => [{ ...g, skills: [] }, ...g.skills])
+/** The inline window's rows: each group's header followed by its batch row and open skills. */
+function flatten(groups: readonly GroupModel[]): (GroupModel | BatchModel | SkillModel)[] {
+  return groups.flatMap(g => [{ ...g, batch: null, skills: [] }, ...(g.batch ? [g.batch] : []), ...g.skills])
 }
 
 /** The window offset that puts a skill's row at the top, with its group header above it when there is room. */
@@ -263,8 +269,21 @@ function projectGroup(
     version,
     count: isSearching ? `${hits.length}/${shown.length}` : `${shown.length}`,
     isOpen,
+    batch: isOpen ? projectBatch(g, hidden, translations, say) : null,
     skills: isOpen ? hits.map(entry => projectSkill(entry, hidden.includes(entry.id), browse, translations, summaryWidth, say)) : [],
   }
+}
+
+function projectBatch(g: SourceGroup, hidden: readonly SkillId[], translations: TranslationsState | null, say: Say): BatchModel | null {
+  const intent: Intent = { kind: 'translateGroup', sourceId: g.source.id }
+  const batch = translations?.batches[g.source.id]
+  if (batch?.kind === 'running') {
+    return { ...act(intent, say('translatingGroup', { k: batch.done, n: batch.total })), row: 'batch', failure: null }
+  }
+  const n = untranslated(g.skills, hidden, translations).length
+  if (n === 0) return null
+  const failure = batch?.kind === 'failed' ? say('groupFailed', { n: batch.failed }) : null
+  return { ...act(intent, say('translateGroup', { n })), row: 'batch', failure }
 }
 
 function projectSkill(

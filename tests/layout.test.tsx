@@ -45,13 +45,14 @@ for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface, props: paneProps('inline') })
     await ui.press({ key: 'all' })
     await ui.press({ key: 'group:user' })
-    const rows = (await screen(ui)).split('\n').filter(l => l.startsWith('▾') || l.startsWith('  ·') || l === '▲' || l === '▼')
-    expect(rows).toEqual(['▾ User 9', '  · k0', '  · k1', '  · k2', '  · k3', '  · k4', '▼'])
+    const isRow = (l: string) => l.startsWith('▾') || l.startsWith('  ·') || l.startsWith('Translate') || l === '▲' || l === '▼'
+    const rows = (await screen(ui)).split('\n').filter(isRow)
+    expect(rows).toEqual(['▾ User 9', 'Translate this group (9)', '  · k0', '  · k1', '  · k2', '  · k3', '▼'])
 
     await ui.press({ key: 'down' })
     await ui.press({ key: 'down' })
-    const moved = (await screen(ui)).split('\n').filter(l => l.startsWith('▾') || l.startsWith('  ·') || l === '▲' || l === '▼')
-    expect(moved).toEqual(['▲', '  · k1', '  · k2', '  · k3', '  · k4', '  · k5', '  · k6', '▼'])
+    const moved = (await screen(ui)).split('\n').filter(isRow)
+    expect(moved).toEqual(['▲', '  · k0', '  · k1', '  · k2', '  · k3', '  · k4', '  · k5', '▼'])
 
     await ui.press({ key: 'all' })
     expect(await screen(ui)).not.toContain('k1')

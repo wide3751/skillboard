@@ -1,7 +1,7 @@
 // PaneModel to the surface's elements. Decides no content: only which element
 // draws each model node, and what stands in where a surface lacks Input or Select.
 import type { EngineInterface, Hook, RenderSurface } from 'claude-code'
-import { LANG_SELECT_KEY, type Action, type DetailModel, type GroupModel, type PaneModel, type PickModel, type SkillModel } from './view'
+import { LANG_SELECT_KEY, type Action, type BatchModel, type DetailModel, type GroupModel, type PaneModel, type PickModel, type SkillModel } from './view'
 import type { Intent, Lang } from '../types'
 
 export type PaneEvent = Parameters<Hook<'ui.render'>>[1]
@@ -155,6 +155,13 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
     </Box>
   )
 
+  const batch = (b: BatchModel) => (
+    <Box flexDirection="column" paddingLeft={2}>
+      {button(b, { variant: 'secondary' })}
+      {b.failure && <Text dimColor>{b.failure}</Text>}
+    </Box>
+  )
+
   const catalog = () => {
     const c = model.catalog
     switch (c.kind) {
@@ -166,6 +173,7 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
             {c.groups.map(g => (
               <Box flexDirection="column" marginBottom={g.isOpen ? 1 : 0}>
                 {groupHeader(g)}
+                {g.batch && batch(g.batch)}
                 {g.skills.map(skill)}
               </Box>
             ))}
@@ -175,7 +183,7 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
         return (
           <Box flexDirection="column">
             {c.up && button(c.up)}
-            {c.rows.map(row => (row.row === 'group' ? groupHeader(row) : skill(row)))}
+            {c.rows.map(row => (row.row === 'group' ? groupHeader(row) : row.row === 'batch' ? batch(row) : skill(row)))}
             {c.down && button(c.down)}
           </Box>
         )

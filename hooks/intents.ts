@@ -7,7 +7,7 @@ import { fillSkill } from './fill'
 import { readHidden, setHidden } from './hidden'
 import { chooseLanguage, readLanguage, t } from './i18n'
 import { readRecommendation, recommend } from './recommend'
-import { readTranslations, syncTranslations, translateSkill } from './translate'
+import { readTranslations, syncTranslations, translateGroup, translateSkill, untranslated } from './translate'
 import { PANE_ID, inlineOffsetFor, keyOf, matchesQuery } from './view'
 import type { Intent, SkillCatalog, SkillEntry, SkillId, SkillboardOptions } from '../types'
 
@@ -74,6 +74,14 @@ export async function dispatch($: EngineInterface, intent: Intent, surface: Rend
     case 'translate': {
       const skill = findSkill(await readCatalog($), intent.skillId)
       if (skill && roots) await translateSkill($, roots.home, await readLanguage($), skill)
+      return
+    }
+    case 'translateGroup': {
+      const [catalog, translations, hidden, lang] = await Promise.all([readCatalog($), readTranslations($), readHidden($), readLanguage($)])
+      const group = catalog.status === 'ready' ? catalog.groups.find(g => g.source.id === intent.sourceId) : undefined
+      if (!group || !roots) return
+      const skills = untranslated(group.skills, hidden, translations.lang === lang ? translations : null)
+      await translateGroup($, roots.home, lang, group.source.id, skills)
       return
     }
     case 'setLang':

@@ -1,6 +1,8 @@
 import { expect, test } from 'claude-code/testing'
-import { CWD, HOME, PANE, SMALL, SURFACES, installWorld, paneProps, screen, typed, type Recorder } from './world'
+import type { ContextSkill } from 'claude-code'
+import { CWD, HOME, PANE, SMALL, SURFACES, installWorld, paneProps, screen, skillMd, typed, type Recorder, type World } from './world'
 import type { Engine } from 'claude-code/testing'
+import { hashText } from '../hooks/catalog'
 
 const ZH = { options: { language: 'zh-TW' } }
 const FILE = `${HOME}/.claude/skillboard/translations/zh-TW.md`
@@ -130,4 +132,85 @@ test('an English interface can translate too: no language is special', async ($,
   await ui.press({ key: `translate:${TDD}` })
   expect(rec.writes.map(w => w.path)).toEqual([`${HOME}/.claude/skillboard/translations/en.md`])
   await ui.unmount()
+})
+
+const SIX: World = {
+  files: Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`${HOME}/.claude/skills/k${i}/SKILL.md`, skillMd(`skill k${i}`)])),
+  usage: Array.from({ length: 6 }, (_, i): ContextSkill => ({ name: `k${i}`, source: 'userSettings', tokens: 1 })),
+}
+const CURRENT_K0 = `## user / k0\n<!-- source-hash: ${hashText('skill k0')} -->\n技能零\n`
+const batchLine = (text: string) => text.split('\n').find(l => l.startsWith('翻譯此分類') || l.startsWith('翻譯中 '))
+
+test('翻譯此分類 translates the group three at a time and keeps every section', ZH, async ($, on) => {
+  let inFlight = 0
+  let most = 0
+  const rec = installWorld(on, {
+    ...SIX,
+    files: { ...SIX.files, [FILE]: CURRENT_K0 },
+    store: { hidden: ['user|k1'] },
+    haiku: async prompt => {
+      inFlight += 1
+      most = Math.max(most, inFlight)
+      await rec.sleep(1000)
+      inFlight -= 1
+      return `譯 ${prompt}`
+    },
+  })
+  await start($, rec, 'terminal')
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: paneProps('dock') })
+  await ui.press({ key: 'group:user' })
+  expect(batchLine(await screen(ui))).toBe('翻譯此分類（4）')
+
+  await ui.press({ key: 'translateGroup:user' })
+  await rec.settle()
+  expect(rec.haikuPrompts).toEqual(['skill k2', 'skill k3', 'skill k4'])
+  await ui.press({ key: 'translateGroup:user' })
+  await rec.advance(1000)
+  expect(batchLine(await screen(ui))).toBe('翻譯中 3/4')
+  expect(await screen(ui)).toContain('譯 skill k2')
+  await rec.advance(1000)
+  await rec.settle()
+
+  expect(rec.haikuPrompts).toEqual(['skill k2', 'skill k3', 'skill k4', 'skill k5'])
+  expect(most).toBe(3)
+  const final = rec.files[FILE] as string
+  for (const [key, text] of [['k0', '技能零'], ['k2', '譯 skill k2'], ['k3', '譯 skill k3'], ['k4', '譯 skill k4'], ['k5', '譯 skill k5']]) {
+    expect(final).toContain(`## user / ${key}\n`)
+    expect(final).toContain(text)
+  }
+  expect(final).not.toContain('user / k1')
+  expect(batchLine(await screen(ui))).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a failed skill leaves the group button and says how many failed', ZH, async ($, on) => {
+  const rec = installWorld(on, { ...SIX, haiku: prompt => (prompt === 'skill k3' ? 'api-error' : `譯 ${prompt}`) })
+  await start($, rec, 'desktop')
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: paneProps('dock') })
+  await ui.press({ key: 'group:user' })
+  await ui.press({ key: 'translateGroup:user' })
+  await rec.settle()
+  const text = await screen(ui)
+  expect(batchLine(text)).toBe('翻譯此分類（1）')
+  expect(text).toContain('1 個翻譯失敗')
+  expect(text).toContain('譯 skill k5')
+  await ui.unmount()
+})
+
+test('the group button is absent when every skill is translated, inline too', ZH, async ($, on) => {
+  const rec = installWorld(on, {
+    files: { [`${HOME}/.claude/skills/k0/SKILL.md`]: skillMd('skill k0'), [FILE]: CURRENT_K0 },
+    usage: [{ name: 'k0', source: 'userSettings', tokens: 1 }],
+  })
+  await start($, rec, 'terminal')
+  for (const placement of ['dock', 'inline'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: paneProps(placement) })
+    if (placement === 'inline') await ui.press({ key: 'all' })
+    await ui.press({ key: 'group:user' })
+    const text = await screen(ui)
+    expect(text).toContain('k0')
+    expect(batchLine(text)).toBeUndefined()
+    await ui.press({ key: 'group:user' })
+    await ui.unmount()
+  }
 })

@@ -80,7 +80,11 @@ export type TranslationsState = {
   mtimeMs: number | null
   entries: Readonly<Record<string, TranslationEntry>>
   jobs: Readonly<Record<string, 'running' | 'failed'>>
+  /** A group's 翻譯此分類 run by SourceId; absent means idle. `failed` stays until the next run. */
+  batches: Readonly<Record<string, GroupBatch>>
 }
+
+export type GroupBatch = { kind: 'running'; done: number; total: number } | { kind: 'failed'; failed: number }
 
 export type BrowseState = {
   query: string
@@ -109,6 +113,7 @@ export type Intent =
   | { kind: 'refresh' }
   | { kind: 'rerun' }
   | { kind: 'translate'; skillId: SkillId }
+  | { kind: 'translateGroup'; sourceId: SourceId }
   | { kind: 'fill'; skillId: SkillId }
   | { kind: 'setLang'; lang: Lang }
   | { kind: 'hide'; skillId: SkillId }

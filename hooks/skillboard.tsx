@@ -6,7 +6,7 @@ import { readLanguage, resolveLanguage, t } from './i18n'
 import { dispatch, type DispatchContext } from './intents'
 import { paint } from './paint'
 import { clearRecommendation, readRecommendation, recommend, settleOrphanedRun } from './recommend'
-import { readTranslations, syncTranslations } from './translate'
+import { readTranslations, settleOrphanedTranslations, syncTranslations } from './translate'
 import { PANE_ID, project } from './view'
 import type { Lang, SkillboardOptions } from '../types'
 
@@ -53,6 +53,7 @@ export const register: Register = (on, raw) => {
     const scanRoots: ScanRoots = { cwd: started.cwd, home: (await $.env.get('HOME')) ?? '' }
     roots = scanRoots
     await settleOrphanedRun($)
+    await settleOrphanedTranslations($)
     await loadHidden($)
     const lang = await resolveLanguage($, options.language)
     await syncTranslations($, scanRoots.home, lang)
