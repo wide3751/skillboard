@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
+    <img src="assets/logo.svg" width="360" alt="skillboard">
+  </picture>
+</p>
+
 [English](README.md) | 繁體中文
 
 # skillboard：Claude Code 的 Skills 面板（Claude Code mod）

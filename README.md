@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
+    <img src="assets/logo.svg" width="360" alt="skillboard">
+  </picture>
+</p>
+
 English | [繁體中文](README.zh-TW.md)
 
 # skillboard: a skills pane for Claude Code (a Claude Code mod)
