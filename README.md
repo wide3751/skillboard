@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
+    <img src="assets/logo.svg" width="360" alt="skillboard">
+  </picture>
+</p>
+
 # Skillboard
 
 Skillboard 是 Claude Code 的 mod。它在對話旁開一個 Skills Pane，列出目前 session 可用的全部 skill，並在你送出 prompt 時建議可能用得上的 skill。
