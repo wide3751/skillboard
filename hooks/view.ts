@@ -5,7 +5,7 @@ import { t, type Say } from './i18n'
 import { translationKeyOf, untranslated } from './translate'
 import type {
   BrowseState, Intent, JevFailure, Lang, RecommendationPick, RecommendationState, SkillCatalog, SkillEntry, SkillId, Source,
-  SourceGroup, TranslationsState,
+  SourceGroup, SourceId, TranslationsState,
 } from '../types'
 
 export const PANE_ID = 'skillboard'
@@ -17,6 +17,7 @@ export function keyOf(intent: Intent): string {
   switch (intent.kind) {
     case 'search': return 'search'
     case 'toggleGroup': return `group:${intent.sourceId}`
+    case 'setGroupsOpen': return 'groups'
     case 'toggleSkill': return `skill:${intent.skillId}`
     case 'toggleOriginal': return `original:${intent.skillId}`
     case 'reveal': return `rec:${intent.skillId}`
@@ -49,6 +50,8 @@ export type PaneModel = {
     /** Inline only: shows or hides the catalog window. */
     all: Action | null
     language: { label: string; value: Lang; options: readonly { lang: Lang; label: string; action: Action }[] } | null
+    /** 全部展開 while any drawn group is shut, else 全部收合; null while no group is drawn. */
+    groups: Action | null
   }
   catalog: CatalogModel
   /** Below the catalog while it is drawn and some listed skill is hidden. */
@@ -76,6 +79,7 @@ export type CatalogModel =
 
 export type GroupModel = Action & {
   row: 'group'
+  sourceId: SourceId
   title: string
   version: string | null
   count: string
@@ -128,7 +132,8 @@ const LANGS = Object.keys(LANG_NAMES) as Lang[]
 export function project(s: Snapshot, placement: 'dock' | 'inline', options: ProjectOptions): PaneModel {
   const say = t(s.lang)
   const translations = s.translations.lang === s.lang ? s.translations : null
-  const catalog = projectCatalog(s, translations, placement, options.columns, say)
+  const { catalog, groups } = projectCatalog(s, translations, placement, options.columns, say)
+  const anyShut = groups.some(g => !g.isOpen)
   return {
     layout: placement,
     recommendation: options.hasJev ? projectRecommendation(s, options.threshold, say) : null,
@@ -141,6 +146,10 @@ export function project(s: Snapshot, placement: 'dock' | 'inline', options: Proj
         value: s.lang,
         options: LANGS.map(lang => ({ lang, label: LANG_NAMES[lang], action: act({ kind: 'setLang', lang }, LANG_NAMES[lang]) })),
       },
+      groups: groups.length === 0 ? null : act(
+        { kind: 'setGroupsOpen', sourceIds: groups.map(g => g.sourceId), isOpen: anyShut },
+        anyShut ? say('expandAll') : say('collapseAll'),
+      ),
     },
     catalog,
     showHidden: catalog.kind === 'hidden' ? null : projectShowHidden(s, say),
@@ -203,29 +212,31 @@ function failureText(failure: JevFailure, say: Say): string {
   }
 }
 
+/** The catalog as drawn, and the groups it draws: what 全部展開 acts on. */
 function projectCatalog(
   s: Snapshot, translations: TranslationsState | null, placement: 'dock' | 'inline', columns: number, say: Say,
-): CatalogModel {
-  if (s.catalog.status === 'pending') return { kind: 'message', text: say('catalogPending') }
+): { catalog: CatalogModel; groups: readonly GroupModel[] } {
+  if (s.catalog.status === 'pending') return { catalog: { kind: 'message', text: say('catalogPending') }, groups: [] }
   const query = s.browse.query.trim()
-  if (placement === 'inline' && !s.browse.inlineShowAll && query === '') return { kind: 'hidden' }
+  if (placement === 'inline' && !s.browse.inlineShowAll && query === '') return { catalog: { kind: 'hidden' }, groups: [] }
   // The inline window counts rows, so a summary line under each would halve what it shows.
   const summaryWidth = placement === 'dock' ? columns - SUMMARY_INDENT : null
   const groups = projectGroups(s.catalog.groups, s.browse, s.hidden, translations, summaryWidth, say)
   if (groups.length === 0) {
-    if (query !== '') return { kind: 'message', text: say('noResult', { q: query }) }
+    if (query !== '') return { catalog: { kind: 'message', text: say('noResult', { q: query }) }, groups }
     // Every skill hidden: nothing to draw above the 顯示已隱藏 toggle.
-    return s.catalog.groups.length === 0 ? { kind: 'message', text: say('catalogEmpty') } : { kind: 'groups', groups: [] }
+    return { catalog: s.catalog.groups.length === 0 ? { kind: 'message', text: say('catalogEmpty') } : { kind: 'groups', groups: [] }, groups }
   }
-  if (placement === 'dock') return { kind: 'groups', groups }
+  if (placement === 'dock') return { catalog: { kind: 'groups', groups }, groups }
   const rows = flatten(groups)
   const offset = Math.min(s.browse.inlineOffset, Math.max(0, rows.length - INLINE_WINDOW_ROWS))
-  return {
+  const catalog: CatalogModel = {
     kind: 'window',
     rows: rows.slice(offset, offset + INLINE_WINDOW_ROWS),
     up: offset > 0 ? act({ kind: 'scroll', delta: -1 }, '▲') : null,
     down: offset + INLINE_WINDOW_ROWS < rows.length ? act({ kind: 'scroll', delta: 1 }, '▼') : null,
   }
+  return { catalog, groups }
 }
 
 function projectGroups(
@@ -265,6 +276,7 @@ function projectGroup(
   return {
     ...act({ kind: 'toggleGroup', sourceId: g.source.id }, title),
     row: 'group',
+    sourceId: g.source.id,
     title,
     version,
     count: isSearching ? `${hits.length}/${shown.length}` : `${shown.length}`,

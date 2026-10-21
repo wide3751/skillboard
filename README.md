@@ -2,7 +2,7 @@
 
 Skillboard 是 Claude Code 的 mod。它在對話旁開一個 Skills Pane，列出目前 session 可用的全部 skill，並在你送出 prompt 時建議可能用得上的 skill。
 
-- **Skill Catalog**：依 Source 分組（每個 plugin 一組，加上使用者層、專案層、內建），plugin 分組附版本號。可以收合分組，也可以用關鍵字搜尋名稱、plugin 名稱、原文說明與譯文。
+- **Skill Catalog**：依 Source 分組（每個 plugin 一組，加上使用者層、專案層、內建），plugin 分組附版本號。可以收合分組，語言選單右邊的「全部展開／全部收合」一次開關所有顯示中的分組，也可以用關鍵字搜尋名稱、plugin 名稱、原文說明與譯文。
 - **Recommendation**：設定 TypeSafe Jev 的 API key 後，每次送出 prompt 會在 Catalog 上方列出最多 3 個 skill，各附信心度。沒有 key 就只顯示 Catalog。
 - 點一個 skill 會展開說明，並有「翻譯」與「填入」兩個按鈕。「翻譯」用 Claude Haiku 把說明翻成介面語言，存進 Translation File；「填入」把 `/skill名稱` 放進輸入框，由你決定何時送出。
 - 打開的分組第一列是「翻譯此分類（N）」：一次翻譯該組還沒有譯文或譯文已過期的 skill（不含已隱藏的），最多同時 3 個，翻好一個就顯示一個。

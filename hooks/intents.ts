@@ -22,6 +22,7 @@ export async function dispatch($: EngineInterface, intent: Intent, surface: Rend
   switch (intent.kind) {
     case 'search':
     case 'toggleGroup':
+    case 'setGroupsOpen':
     case 'toggleSkill':
     case 'toggleOriginal':
     case 'toggleAll':

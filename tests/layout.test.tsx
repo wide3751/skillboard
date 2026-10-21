@@ -82,3 +82,60 @@ test('pressing an inline pick opens the window at that skill', JEV, async ($, on
   expect(text).toContain('skill k8')
   await ui.unmount()
 })
+
+const groupsButton = (text: string) => text.split('\n').find(l => /Expand all|Collapse all/.test(l))
+
+test('全部展開 opens every group and 全部收合 shuts them, beside the language', async ($, on) => {
+  const rec = installWorld(on, SMALL)
+  await $.session.start({ cwd: CWD, surface: 'desktop', isInteractive: true })
+  await rec.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: paneProps('dock') })
+  expect(groupsButton(await screen(ui))).toBe('[? Search skills] Refresh <en> Expand all')
+
+  await ui.press({ key: 'group:user' })
+  expect(groupsButton(await screen(ui))).toContain('Expand all')
+  await ui.press({ key: 'groups' })
+  let text = await screen(ui)
+  expect(text.split('\n').filter(l => l.startsWith('▸'))).toEqual([])
+  expect(text.split('\n').filter(l => l.startsWith('▾'))).toHaveLength(3)
+  expect(groupsButton(text)).toContain('Collapse all')
+
+  await ui.press({ key: 'groups' })
+  text = await screen(ui)
+  expect(text.split('\n').filter(l => l.startsWith('▾'))).toEqual([])
+  expect(groupsButton(text)).toContain('Expand all')
+  await ui.unmount()
+})
+
+test('while searching, 全部收合 and 全部展開 act on the groups the search shows', async ($, on) => {
+  const rec = installWorld(on, SMALL)
+  await $.session.start({ cwd: CWD, surface: 'terminal', isInteractive: true })
+  await rec.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: paneProps('dock') })
+  await ui.input({ key: 'search', text: 'tdd' })
+  const headers = async () => (await screen(ui)).split('\n').filter(l => l.startsWith('▸') || l.startsWith('▾'))
+  expect(await headers()).toEqual(['▾ mattpocock-skills 1.3.1 · 1/3', '▾ User 1/1'])
+  expect(groupsButton(await screen(ui))).toContain('Collapse all')
+
+  await ui.press({ key: 'groups' })
+  expect(await headers()).toEqual(['▸ mattpocock-skills 1.3.1 · 1/3', '▸ User 1/1'])
+  await ui.press({ key: 'group:user' })
+  expect(groupsButton(await screen(ui))).toContain('Expand all')
+  await ui.press({ key: 'groups' })
+  expect(await headers()).toEqual(['▾ mattpocock-skills 1.3.1 · 1/3', '▾ User 1/1'])
+
+  await ui.input({ key: 'search', text: '' })
+  expect((await headers()).every(l => l.startsWith('▸'))).toBe(true)
+  await ui.unmount()
+})
+
+test('inline shows 全部展開 beside 全部 only while the catalog window is open', async ($, on) => {
+  const rec = installWorld(on, SMALL)
+  await $.session.start({ cwd: CWD, surface: 'terminal', isInteractive: true })
+  await rec.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal', props: paneProps('inline') })
+  expect(groupsButton(await screen(ui))).toBeUndefined()
+  await ui.press({ key: 'all' })
+  expect((await screen(ui)).split('\n')).toContain('Hide Expand all')
+  await ui.unmount()
+})

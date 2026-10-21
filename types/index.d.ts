@@ -105,6 +105,8 @@ export type BrowseState = {
 export type Intent =
   | { kind: 'search'; query: string }
   | { kind: 'toggleGroup'; sourceId: SourceId }
+  /** 全部展開／全部收合 over the groups drawn when it was pressed. */
+  | { kind: 'setGroupsOpen'; sourceIds: readonly SourceId[]; isOpen: boolean }
   | { kind: 'toggleSkill'; skillId: SkillId }
   | { kind: 'toggleOriginal'; skillId: SkillId }
   | { kind: 'reveal'; skillId: SkillId }

@@ -12,7 +12,7 @@ export function readBrowse($: EngineInterface): Promise<BrowseState> {
 }
 
 export type BrowseChange =
-  | Extract<Intent, { kind: 'search' | 'toggleGroup' | 'toggleSkill' | 'toggleOriginal' | 'toggleAll' | 'scroll' | 'toggleShowHidden' }>
+  | Extract<Intent, { kind: 'search' | 'toggleGroup' | 'setGroupsOpen' | 'toggleSkill' | 'toggleOriginal' | 'toggleAll' | 'scroll' | 'toggleShowHidden' }>
   /** Showing a Recommendation's skill: open its group, expand it, drop a query that hides it. */
   | { kind: 'reveal'; skillId: SkillId; sourceId: SourceId; isHiddenByQuery: boolean }
   | { kind: 'scrollTo'; offset: number }
@@ -32,6 +32,13 @@ function reduce(s: BrowseState, c: BrowseChange): BrowseState {
       return s.query.trim() !== ''
         ? { ...s, shutWhileSearching: toggle(s.shutWhileSearching, c.sourceId) }
         : { ...s, opened: toggle(s.opened, c.sourceId) }
+    case 'setGroupsOpen': {
+      const set = (list: readonly SourceId[], isIn: boolean) =>
+        isIn ? [...list, ...c.sourceIds.filter(id => !list.includes(id))] : list.filter(id => !c.sourceIds.includes(id))
+      return s.query.trim() !== ''
+        ? { ...s, shutWhileSearching: set(s.shutWhileSearching, !c.isOpen) }
+        : { ...s, opened: set(s.opened, c.isOpen) }
+    }
     case 'toggleSkill':
       return { ...s, expanded: s.expanded === c.skillId ? null : c.skillId }
     case 'toggleOriginal':

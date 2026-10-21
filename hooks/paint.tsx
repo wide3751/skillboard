@@ -70,7 +70,7 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
   }
 
   const toolbar = () => {
-    const { search, refresh, all, language } = model.toolbar
+    const { search, refresh, all, language, groups } = model.toolbar
     const onSearch = (value: string, surface: RenderSurface) => dispatch({ kind: 'search', query: value }, surface)
     const input = Input && (
       <Input
@@ -95,6 +95,7 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
       ) : (
         language.options.map(o => button(o.action, { dimColor: o.lang !== language.value }))
       )),
+      groups && button(groups, { variant: 'secondary' }),
     ]
     if (model.layout === 'dock') {
       return (
