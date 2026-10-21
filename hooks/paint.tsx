@@ -74,9 +74,9 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
           />
         )}
         <Box flexDirection="row" gap={1} flexWrap="wrap">
-          {button(refresh)}
+          {refresh && button(refresh)}
           {all && button(all)}
-          {Select ? (
+          {language && (Select ? (
             <Select
               key={LANG_SELECT_KEY}
               label={language.label}
@@ -86,7 +86,7 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
             />
           ) : (
             language.options.map(o => button(o.action, { dimColor: o.lang !== language.value }))
-          )}
+          ))}
         </Box>
       </Box>
     )

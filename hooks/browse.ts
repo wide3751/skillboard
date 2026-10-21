@@ -15,6 +15,7 @@ export type BrowseChange =
   | Extract<Intent, { kind: 'search' | 'toggleGroup' | 'toggleSkill' | 'toggleOriginal' | 'toggleAll' | 'scroll' }>
   /** Showing a Recommendation's skill: open its group, expand it, drop a query that hides it. */
   | { kind: 'reveal'; skillId: SkillId; sourceId: SourceId; isHiddenByQuery: boolean }
+  | { kind: 'scrollTo'; offset: number }
 
 export function changeBrowse($: EngineInterface, change: BrowseChange): Promise<BrowseState> {
   return update($, browse, state => reduce(state, change))
@@ -39,6 +40,8 @@ function reduce(s: BrowseState, c: BrowseChange): BrowseState {
       return { ...s, inlineShowAll: !s.inlineShowAll, inlineOffset: 0 }
     case 'scroll':
       return { ...s, inlineOffset: Math.max(0, s.inlineOffset + c.delta) }
+    case 'scrollTo':
+      return { ...s, inlineOffset: Math.max(0, c.offset) }
     case 'reveal':
       return {
         ...s,

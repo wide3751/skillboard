@@ -7,7 +7,7 @@ import { fillSkill } from './fill'
 import { chooseLanguage, readLanguage, t } from './i18n'
 import { readRecommendation, recommend } from './recommend'
 import { readTranslations, syncTranslations, translateSkill } from './translate'
-import { PANE_ID, keyOf, matchesQuery } from './view'
+import { PANE_ID, inlineOffsetFor, keyOf, matchesQuery } from './view'
 import type { Intent, SkillCatalog, SkillEntry, SkillId, SkillboardOptions } from '../types'
 
 export type DispatchContext = {
@@ -41,7 +41,9 @@ export async function dispatch($: EngineInterface, intent: Intent, surface: Rend
       const skill = group?.skills.find(s => s.id === intent.skillId)
       if (!group || !skill) return
       const visible = matchesQuery(skill, group.source, browse.query, translations.lang === lang ? translations : null)
-      await changeBrowse($, { kind: 'reveal', skillId: skill.id, sourceId: group.source.id, isHiddenByQuery: !visible })
+      const revealed = await changeBrowse($, { kind: 'reveal', skillId: skill.id, sourceId: group.source.id, isHiddenByQuery: !visible })
+      const offset = inlineOffsetFor({ catalog, recommendation: await readRecommendation($), translations, browse: revealed, lang }, skill.id)
+      await changeBrowse($, { kind: 'scrollTo', offset })
       await $.ui.scroll({ to: { key: keyOf({ kind: 'toggleSkill', skillId: skill.id }) }, in: PANE_ID, block: 'start' })
       return
     }

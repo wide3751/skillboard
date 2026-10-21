@@ -4,7 +4,7 @@ import { formatVersion, newest } from './catalog'
 import { t, type Say } from './i18n'
 import { translationKeyOf } from './translate'
 import type {
-  BrowseState, Intent, JevFailure, Lang, RecommendationPick, RecommendationState, SkillCatalog, SkillEntry, Source,
+  BrowseState, Intent, JevFailure, Lang, RecommendationPick, RecommendationState, SkillCatalog, SkillEntry, SkillId, Source,
   SourceGroup, TranslationsState,
 } from '../types'
 
@@ -40,10 +40,11 @@ export type PaneModel = {
   recommendation: RecommendationModel | null
   toolbar: {
     search: { key: string; value: string; placeholder: string }
-    refresh: Action
+    /** Dock only: inline keeps just the Recommendation, search and 全部. */
+    refresh: Action | null
     /** Inline only: shows or hides the catalog window. */
     all: Action | null
-    language: { label: string; value: Lang; options: readonly { lang: Lang; label: string; action: Action }[] }
+    language: { label: string; value: Lang; options: readonly { lang: Lang; label: string; action: Action }[] } | null
   }
   catalog: CatalogModel
 }
@@ -110,9 +111,9 @@ export function project(s: Snapshot, placement: 'dock' | 'inline', options: Proj
     recommendation: options.hasJev ? projectRecommendation(s, options.threshold, say) : null,
     toolbar: {
       search: { key: keyOf({ kind: 'search', query: '' }), value: s.browse.query, placeholder: say('search') },
-      refresh: act({ kind: 'refresh' }, say('refresh')),
+      refresh: placement === 'dock' ? act({ kind: 'refresh' }, say('refresh')) : null,
       all: placement === 'inline' ? act({ kind: 'toggleAll' }, s.browse.inlineShowAll ? say('collapse') : say('all')) : null,
-      language: {
+      language: placement === 'inline' ? null : {
         label: say('language'),
         value: s.lang,
         options: LANGS.map(lang => ({ lang, label: LANG_NAMES[lang], action: act({ kind: 'setLang', lang }, LANG_NAMES[lang]) })),
@@ -175,15 +176,10 @@ function projectCatalog(s: Snapshot, translations: TranslationsState | null, pla
   if (s.catalog.status === 'pending') return { kind: 'message', text: say('catalogPending') }
   const query = s.browse.query.trim()
   if (placement === 'inline' && !s.browse.inlineShowAll && query === '') return { kind: 'hidden' }
-  const groups = s.catalog.groups.flatMap(g => {
-    const hits = query === '' ? g.skills : g.skills.filter(entry => matchesQuery(entry, g.source, query, translations))
-    if (query !== '' && hits.length === 0) return []
-    const isOpen = query === '' ? s.browse.opened.includes(g.source.id) : !s.browse.shutWhileSearching.includes(g.source.id)
-    return [projectGroup(g, hits, isOpen, query !== '', s.browse, translations, say)]
-  })
+  const groups = projectGroups(s.catalog.groups, s.browse, translations, say)
   if (groups.length === 0) return { kind: 'message', text: query === '' ? say('catalogEmpty') : say('noResult', { q: query }) }
   if (placement === 'dock') return { kind: 'groups', groups }
-  const rows = groups.flatMap(g => [{ ...g, skills: [] }, ...g.skills])
+  const rows = flatten(groups)
   const offset = Math.min(s.browse.inlineOffset, Math.max(0, rows.length - INLINE_WINDOW_ROWS))
   return {
     kind: 'window',
@@ -191,6 +187,30 @@ function projectCatalog(s: Snapshot, translations: TranslationsState | null, pla
     up: offset > 0 ? act({ kind: 'scroll', delta: -1 }, '▲') : null,
     down: offset + INLINE_WINDOW_ROWS < rows.length ? act({ kind: 'scroll', delta: 1 }, '▼') : null,
   }
+}
+
+function projectGroups(groups: readonly SourceGroup[], browse: BrowseState, translations: TranslationsState | null, say: Say): GroupModel[] {
+  const query = browse.query.trim()
+  return groups.flatMap(g => {
+    const hits = query === '' ? g.skills : g.skills.filter(entry => matchesQuery(entry, g.source, query, translations))
+    if (query !== '' && hits.length === 0) return []
+    const isOpen = query === '' ? browse.opened.includes(g.source.id) : !browse.shutWhileSearching.includes(g.source.id)
+    return [projectGroup(g, hits, isOpen, query !== '', browse, translations, say)]
+  })
+}
+
+/** The inline window's rows: each group's header followed by its open skills. */
+function flatten(groups: readonly GroupModel[]): (GroupModel | SkillModel)[] {
+  return groups.flatMap(g => [{ ...g, skills: [] }, ...g.skills])
+}
+
+/** The window offset that puts a skill's row at the top, with its group header above it when there is room. */
+export function inlineOffsetFor(s: Snapshot, skillId: SkillId): number {
+  if (s.catalog.status !== 'ready') return 0
+  const translations = s.translations.lang === s.lang ? s.translations : null
+  const rows = flatten(projectGroups(s.catalog.groups, s.browse, translations, t(s.lang)))
+  const at = rows.findIndex(row => row.row === 'skill' && row.intent.kind === 'toggleSkill' && row.intent.skillId === skillId)
+  return Math.max(0, at - 1)
 }
 
 function projectGroup(
