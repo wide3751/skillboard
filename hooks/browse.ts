@@ -3,7 +3,7 @@ import type { EngineInterface } from 'claude-code'
 import type { BrowseState, Intent, SkillId, SourceId } from '../types'
 
 const INITIAL: BrowseState = {
-  query: '', expanded: null, opened: [], shutWhileSearching: [], showingOriginal: [], inlineShowAll: false, inlineOffset: 0,
+  query: '', expanded: null, opened: [], shutWhileSearching: [], showingOriginal: [], inlineShowAll: false, inlineOffset: 0, showHidden: false,
 }
 const browse = atom({ plugin: 'skillboard', key: 'browse' } as const, INITIAL)
 
@@ -12,7 +12,7 @@ export function readBrowse($: EngineInterface): Promise<BrowseState> {
 }
 
 export type BrowseChange =
-  | Extract<Intent, { kind: 'search' | 'toggleGroup' | 'toggleSkill' | 'toggleOriginal' | 'toggleAll' | 'scroll' }>
+  | Extract<Intent, { kind: 'search' | 'toggleGroup' | 'toggleSkill' | 'toggleOriginal' | 'toggleAll' | 'scroll' | 'toggleShowHidden' }>
   /** Showing a Recommendation's skill: open its group, expand it, drop a query that hides it. */
   | { kind: 'reveal'; skillId: SkillId; sourceId: SourceId; isHiddenByQuery: boolean }
   | { kind: 'scrollTo'; offset: number }
@@ -40,6 +40,8 @@ function reduce(s: BrowseState, c: BrowseChange): BrowseState {
       return { ...s, inlineShowAll: !s.inlineShowAll, inlineOffset: 0 }
     case 'scroll':
       return { ...s, inlineOffset: Math.max(0, s.inlineOffset + c.delta) }
+    case 'toggleShowHidden':
+      return { ...s, showHidden: !s.showHidden }
     case 'scrollTo':
       return { ...s, inlineOffset: Math.max(0, c.offset) }
     case 'reveal':

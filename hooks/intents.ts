@@ -4,6 +4,7 @@ import type { EngineInterface, RenderSurface } from 'claude-code'
 import { changeBrowse, readBrowse } from './browse'
 import { readCatalog, refreshCatalog, type ScanRoots } from './catalog'
 import { fillSkill } from './fill'
+import { readHidden, setHidden } from './hidden'
 import { chooseLanguage, readLanguage, t } from './i18n'
 import { readRecommendation, recommend } from './recommend'
 import { readTranslations, syncTranslations, translateSkill } from './translate'
@@ -25,16 +26,28 @@ export async function dispatch($: EngineInterface, intent: Intent, surface: Rend
     case 'toggleOriginal':
     case 'toggleAll':
     case 'scroll':
+    case 'toggleShowHidden':
       await changeBrowse($, intent)
       return
+    case 'hide':
+      await setHidden($, intent.skillId, true)
+      return
+    case 'unhide': {
+      const hidden = await setHidden($, intent.skillId, false)
+      const catalog = await readCatalog($)
+      const anyListed = catalog.status === 'ready' && catalog.groups.some(g => g.skills.some(s => hidden.includes(s.id)))
+      // With the toggle gone, the next 隱藏 would otherwise leave its skill on screen.
+      if (!anyListed && (await readBrowse($)).showHidden) await changeBrowse($, { kind: 'toggleShowHidden' })
+      return
+    }
     case 'refresh':
       if (!roots) return
       await refreshCatalog($, roots, true)
       await syncTranslations($, roots.home, await readLanguage($))
       return
     case 'reveal': {
-      const [catalog, translations, browse, lang] = await Promise.all([
-        readCatalog($), readTranslations($), readBrowse($), readLanguage($),
+      const [catalog, translations, browse, hidden, lang] = await Promise.all([
+        readCatalog($), readTranslations($), readBrowse($), readHidden($), readLanguage($),
       ])
       if (catalog.status !== 'ready') return
       const group = catalog.groups.find(g => g.skills.some(s => s.id === intent.skillId))
@@ -42,7 +55,7 @@ export async function dispatch($: EngineInterface, intent: Intent, surface: Rend
       if (!group || !skill) return
       const visible = matchesQuery(skill, group.source, browse.query, translations.lang === lang ? translations : null)
       const revealed = await changeBrowse($, { kind: 'reveal', skillId: skill.id, sourceId: group.source.id, isHiddenByQuery: !visible })
-      const offset = inlineOffsetFor({ catalog, recommendation: await readRecommendation($), translations, browse: revealed, lang }, skill.id)
+      const offset = inlineOffsetFor({ catalog, recommendation: await readRecommendation($), translations, browse: revealed, hidden, lang }, skill.id)
       await changeBrowse($, { kind: 'scrollTo', offset })
       await $.ui.scroll({ to: { key: keyOf({ kind: 'toggleSkill', skillId: skill.id }) }, in: PANE_ID, block: 'start' })
       return

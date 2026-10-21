@@ -5,6 +5,7 @@
 //   translations    hooks/translate.ts
 //   language        hooks/i18n.ts
 //   browse          hooks/browse.ts
+//   hidden          hooks/hidden.ts
 
 export type Lang = 'zh-TW' | 'en' | 'ja' | 'zh-CN'
 
@@ -92,6 +93,8 @@ export type BrowseState = {
   inlineShowAll: boolean
   /** First visible row of the inline window; clamped at projection. */
   inlineOffset: number
+  /** Hidden skills drawn dimmed in their groups instead of left out. */
+  showHidden: boolean
 }
 
 /** Everything a person can press, type or pick in the Skills Pane. */
@@ -108,6 +111,9 @@ export type Intent =
   | { kind: 'translate'; skillId: SkillId }
   | { kind: 'fill'; skillId: SkillId }
   | { kind: 'setLang'; lang: Lang }
+  | { kind: 'hide'; skillId: SkillId }
+  | { kind: 'unhide'; skillId: SkillId }
+  | { kind: 'toggleShowHidden' }
 
 export type SkillboardOptions = {
   /** '' means no Jev: no Recommendation section and no request. */
@@ -129,6 +135,8 @@ declare module 'claude-code' {
       translations: TranslationsState
       language: Lang
       browse: BrowseState
+      /** Kept by SkillId so an upgrade keeps it hidden; an id whose skill is gone stays in case it returns. */
+      hidden: readonly SkillId[]
     }
   }
 }

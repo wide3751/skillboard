@@ -27,6 +27,9 @@ export function keyOf(intent: Intent): string {
     case 'translate': return `translate:${intent.skillId}`
     case 'fill': return `fill:${intent.skillId}`
     case 'setLang': return `lang:${intent.lang}`
+    case 'hide': return `hide:${intent.skillId}`
+    case 'unhide': return `unhide:${intent.skillId}`
+    case 'toggleShowHidden': return 'showHidden'
   }
 }
 
@@ -47,6 +50,8 @@ export type PaneModel = {
     language: { label: string; value: Lang; options: readonly { lang: Lang; label: string; action: Action }[] } | null
   }
   catalog: CatalogModel
+  /** Below the catalog while it is drawn and some listed skill is hidden. */
+  showHidden: Action | null
 }
 
 export type RecommendationModel = {
@@ -77,7 +82,7 @@ export type GroupModel = Action & {
   skills: readonly SkillModel[]
 }
 
-export type SkillModel = Action & { row: 'skill'; name: string; isExpanded: boolean; detail: DetailModel | null }
+export type SkillModel = Action & { row: 'skill'; name: string; isHidden: boolean; isExpanded: boolean; detail: DetailModel | null }
 
 export type DetailModel = {
   meta: string
@@ -88,6 +93,8 @@ export type DetailModel = {
   translate: Action | null
   toggleOriginal: Action | null
   fill: Action
+  /** 隱藏, or 取消隱藏 on a hidden skill. */
+  hide: Action
 }
 
 export type Snapshot = {
@@ -95,6 +102,7 @@ export type Snapshot = {
   recommendation: RecommendationState
   translations: TranslationsState
   browse: BrowseState
+  hidden: readonly SkillId[]
   lang: Lang
 }
 
@@ -106,6 +114,7 @@ const LANGS = Object.keys(LANG_NAMES) as Lang[]
 export function project(s: Snapshot, placement: 'dock' | 'inline', options: ProjectOptions): PaneModel {
   const say = t(s.lang)
   const translations = s.translations.lang === s.lang ? s.translations : null
+  const catalog = projectCatalog(s, translations, placement, say)
   return {
     layout: placement,
     recommendation: options.hasJev ? projectRecommendation(s, options.threshold, say) : null,
@@ -119,14 +128,22 @@ export function project(s: Snapshot, placement: 'dock' | 'inline', options: Proj
         options: LANGS.map(lang => ({ lang, label: LANG_NAMES[lang], action: act({ kind: 'setLang', lang }, LANG_NAMES[lang]) })),
       },
     },
-    catalog: projectCatalog(s, translations, placement, say),
+    catalog,
+    showHidden: catalog.kind === 'hidden' ? null : projectShowHidden(s, say),
   }
+}
+
+function projectShowHidden(s: Snapshot, say: Say): Action | null {
+  if (s.catalog.status !== 'ready') return null
+  const listed = s.catalog.groups.flatMap(g => g.skills).filter(entry => s.hidden.includes(entry.id)).length
+  if (listed === 0) return null
+  return act({ kind: 'toggleShowHidden' }, s.browse.showHidden ? say('collapseHidden') : say('showHidden', { n: listed }))
 }
 
 function projectRecommendation(s: Snapshot, threshold: number, say: Say): RecommendationModel {
   const r = s.recommendation
   const rerun = { ...act({ kind: 'rerun' }, say('rerun')), isDim: r.kind === 'idle' }
-  const picks = (list: readonly RecommendationPick[]) => projectPicks(s.catalog, list, threshold, say)
+  const picks = (list: readonly RecommendationPick[]) => projectPicks(s.catalog, list.filter(p => !s.hidden.includes(p.skillId)), threshold, say)
   const body = ((): RecommendationModel['body'] => {
     switch (r.kind) {
       case 'idle': return { kind: 'idle' }
@@ -176,8 +193,12 @@ function projectCatalog(s: Snapshot, translations: TranslationsState | null, pla
   if (s.catalog.status === 'pending') return { kind: 'message', text: say('catalogPending') }
   const query = s.browse.query.trim()
   if (placement === 'inline' && !s.browse.inlineShowAll && query === '') return { kind: 'hidden' }
-  const groups = projectGroups(s.catalog.groups, s.browse, translations, say)
-  if (groups.length === 0) return { kind: 'message', text: query === '' ? say('catalogEmpty') : say('noResult', { q: query }) }
+  const groups = projectGroups(s.catalog.groups, s.browse, s.hidden, translations, say)
+  if (groups.length === 0) {
+    if (query !== '') return { kind: 'message', text: say('noResult', { q: query }) }
+    // Every skill hidden: nothing to draw above the 顯示已隱藏 toggle.
+    return s.catalog.groups.length === 0 ? { kind: 'message', text: say('catalogEmpty') } : { kind: 'groups', groups: [] }
+  }
   if (placement === 'dock') return { kind: 'groups', groups }
   const rows = flatten(groups)
   const offset = Math.min(s.browse.inlineOffset, Math.max(0, rows.length - INLINE_WINDOW_ROWS))
@@ -189,13 +210,16 @@ function projectCatalog(s: Snapshot, translations: TranslationsState | null, pla
   }
 }
 
-function projectGroups(groups: readonly SourceGroup[], browse: BrowseState, translations: TranslationsState | null, say: Say): GroupModel[] {
+function projectGroups(
+  groups: readonly SourceGroup[], browse: BrowseState, hidden: readonly SkillId[], translations: TranslationsState | null, say: Say,
+): GroupModel[] {
   const query = browse.query.trim()
   return groups.flatMap(g => {
-    const hits = query === '' ? g.skills : g.skills.filter(entry => matchesQuery(entry, g.source, query, translations))
-    if (query !== '' && hits.length === 0) return []
+    const shown = browse.showHidden ? g.skills : g.skills.filter(entry => !hidden.includes(entry.id))
+    const hits = query === '' ? shown : shown.filter(entry => matchesQuery(entry, g.source, query, translations))
+    if (hits.length === 0) return []
     const isOpen = query === '' ? browse.opened.includes(g.source.id) : !browse.shutWhileSearching.includes(g.source.id)
-    return [projectGroup(g, hits, isOpen, query !== '', browse, translations, say)]
+    return [projectGroup(g, shown, hits, isOpen, query !== '', browse, hidden, translations, say)]
   })
 }
 
@@ -208,14 +232,14 @@ function flatten(groups: readonly GroupModel[]): (GroupModel | SkillModel)[] {
 export function inlineOffsetFor(s: Snapshot, skillId: SkillId): number {
   if (s.catalog.status !== 'ready') return 0
   const translations = s.translations.lang === s.lang ? s.translations : null
-  const rows = flatten(projectGroups(s.catalog.groups, s.browse, translations, t(s.lang)))
+  const rows = flatten(projectGroups(s.catalog.groups, s.browse, s.hidden, translations, t(s.lang)))
   const at = rows.findIndex(row => row.row === 'skill' && row.intent.kind === 'toggleSkill' && row.intent.skillId === skillId)
   return Math.max(0, at - 1)
 }
 
 function projectGroup(
-  g: SourceGroup, hits: readonly SkillEntry[], isOpen: boolean, isSearching: boolean, browse: BrowseState,
-  translations: TranslationsState | null, say: Say,
+  g: SourceGroup, shown: readonly SkillEntry[], hits: readonly SkillEntry[], isOpen: boolean, isSearching: boolean, browse: BrowseState,
+  hidden: readonly SkillId[], translations: TranslationsState | null, say: Say,
 ): GroupModel {
   const title = sourceTitle(g.source, say)
   const version = g.source.kind === 'plugin' ? formatVersion(newest(g.source.installs.map(i => i.version))) : null
@@ -224,24 +248,29 @@ function projectGroup(
     row: 'group',
     title,
     version,
-    count: isSearching ? `${hits.length}/${g.skills.length}` : `${g.skills.length}`,
+    count: isSearching ? `${hits.length}/${shown.length}` : `${shown.length}`,
     isOpen,
-    skills: isOpen ? hits.map(entry => projectSkill(entry, browse, translations, say)) : [],
+    skills: isOpen ? hits.map(entry => projectSkill(entry, hidden.includes(entry.id), browse, translations, say)) : [],
   }
 }
 
-function projectSkill(entry: SkillEntry, browse: BrowseState, translations: TranslationsState | null, say: Say): SkillModel {
+function projectSkill(
+  entry: SkillEntry, isHidden: boolean, browse: BrowseState, translations: TranslationsState | null, say: Say,
+): SkillModel {
   const isExpanded = browse.expanded === entry.id
   return {
     ...act({ kind: 'toggleSkill', skillId: entry.id }, entry.baseName),
     row: 'skill',
     name: entry.baseName,
+    isHidden,
     isExpanded,
-    detail: isExpanded ? projectDetail(entry, browse, translations, say) : null,
+    detail: isExpanded ? projectDetail(entry, isHidden, browse, translations, say) : null,
   }
 }
 
-function projectDetail(entry: SkillEntry, browse: BrowseState, translations: TranslationsState | null, say: Say): DetailModel {
+function projectDetail(
+  entry: SkillEntry, isHidden: boolean, browse: BrowseState, translations: TranslationsState | null, say: Say,
+): DetailModel {
   const translation = translations?.entries[translationKeyOf(entry)]
   const job = translations?.jobs[entry.id]
   const isStale = translation !== undefined && translation.sourceHash !== entry.descriptionHash
@@ -260,6 +289,7 @@ function projectDetail(entry: SkillEntry, browse: BrowseState, translations: Tra
       ? null
       : act({ kind: 'toggleOriginal', skillId: entry.id }, showsTranslation ? say('showOriginal') : say('showTranslation')),
     fill: act({ kind: 'fill', skillId: entry.id }, say('fill')),
+    hide: isHidden ? act({ kind: 'unhide', skillId: entry.id }, say('unhide')) : act({ kind: 'hide', skillId: entry.id }, say('hide')),
   }
 }
 

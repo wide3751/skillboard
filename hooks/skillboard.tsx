@@ -1,5 +1,6 @@
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import { readBrowse } from './browse'
+import { loadHidden, readHidden } from './hidden'
 import { readCatalog, refreshCatalog, type ScanRoots } from './catalog'
 import { readLanguage, resolveLanguage, t } from './i18n'
 import { dispatch, type DispatchContext } from './intents'
@@ -52,6 +53,7 @@ export const register: Register = (on, raw) => {
     const scanRoots: ScanRoots = { cwd: started.cwd, home: (await $.env.get('HOME')) ?? '' }
     roots = scanRoots
     await settleOrphanedRun($)
+    await loadHidden($)
     const lang = await resolveLanguage($, options.language)
     await syncTranslations($, scanRoots.home, lang)
     const say = t(lang)
@@ -84,10 +86,10 @@ export const register: Register = (on, raw) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
-    const [catalog, recommendation, translations, browse, lang] = await Promise.all([
-      readCatalog($), readRecommendation($), readTranslations($), readBrowse($), readLanguage($),
+    const [catalog, recommendation, translations, browse, hidden, lang] = await Promise.all([
+      readCatalog($), readRecommendation($), readTranslations($), readBrowse($), readHidden($), readLanguage($),
     ])
-    const model = project({ catalog, recommendation, translations, browse, lang }, e.props.placement, {
+    const model = project({ catalog, recommendation, translations, browse, hidden, lang }, e.props.placement, {
       hasJev: options.jevApiKey !== '',
       threshold: options.threshold,
     })

@@ -103,6 +103,7 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
         {d.translate && button(d.translate)}
         {d.toggleOriginal && button(d.toggleOriginal)}
         {button(d.fill)}
+        {button(d.hide)}
       </Box>
     </Box>
   )
@@ -111,7 +112,7 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
     <Box flexDirection="column">
       <Button key={s.key} plain onPress={press => dispatch(s.intent, press.surface)}>
         <Text dimColor>{`  ${s.isExpanded ? '▾' : '·'} `}</Text>
-        <Text bold={s.isExpanded}>{s.name}</Text>
+        <Text bold={s.isExpanded} dimColor={s.isHidden}>{s.name}</Text>
       </Button>
       {s.detail && detail(s.detail)}
     </Box>
@@ -155,6 +156,7 @@ export function paint($: EngineInterface, e: PaneEvent, model: PaneModel, dispat
       {recommendation()}
       {toolbar()}
       {catalog()}
+      {model.showHidden && button(model.showHidden, { dimColor: true })}
     </Box>
   )
 }

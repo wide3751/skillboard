@@ -4,7 +4,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 import { compareVersions } from './catalog'
-import type { JevFailure, RecommendationPick, RecommendationState, SkillCatalog, SkillEntry } from '../types'
+import { readHidden } from './hidden'
+import type { JevFailure, RecommendationPick, RecommendationState, SkillCatalog, SkillEntry, SkillId } from '../types'
 
 const recommendation = atom({ plugin: 'skillboard', key: 'recommendation' } as const, { kind: 'idle', ticket: 0 } as RecommendationState)
 
@@ -30,7 +31,8 @@ export async function recommend($: EngineInterface, catalog: SkillCatalog, promp
     const previous = current.kind === 'ready' ? current.picks : current.kind === 'running' ? current.previous : []
     return { kind: 'running', ticket: mine, prompt, previous }
   })
-  const outcome = await rank($, mergeCandidates(catalog), prompt, jevApiKey)
+  const candidates = mergeCandidates(catalog, await readHidden($))
+  const outcome = candidates.length === 0 ? { picks: [] } : await rank($, candidates, prompt, jevApiKey)
   await update($, recommendation, (current): RecommendationState => {
     if (current.ticket !== mine) return current
     return 'failure' in outcome
@@ -49,12 +51,16 @@ export async function clearRecommendation($: EngineInterface): Promise<void> {
   await update($, recommendation, (current): RecommendationState => ({ kind: 'idle', ticket: current.ticket + 1 }))
 }
 
-/** One Jev option per base name, pointing at the newest version so duplicates do not split the probability. */
+/**
+ * One Jev option per base name, pointing at the newest version so duplicates
+ * do not split the probability. Hidden skills leave before the merge, so a
+ * same-named skill from another Source still stands for the name.
+ */
 type Candidate = { label: string; skill: SkillEntry }
 
-function mergeCandidates(catalog: Extract<SkillCatalog, { status: 'ready' }>): Candidate[] {
+function mergeCandidates(catalog: Extract<SkillCatalog, { status: 'ready' }>, hidden: readonly SkillId[]): Candidate[] {
   const byName = new Map<string, SkillEntry>()
-  for (const skill of catalog.groups.flatMap(g => g.skills)) {
+  for (const skill of catalog.groups.flatMap(g => g.skills).filter(s => !hidden.includes(s.id))) {
     const best = byName.get(skill.baseName)
     if (!best || compareVersions(skill.version, best.version) > 0) byName.set(skill.baseName, skill)
   }

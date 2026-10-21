@@ -104,6 +104,10 @@ const EN = {
   stale: 'Outdated',
   copied: 'Copied {text}: paste it into the prompt',
   copyFailed: 'Could not fill or copy {text}',
+  hide: 'Hide skill',
+  unhide: 'Unhide',
+  showHidden: 'Show hidden ({n})',
+  collapseHidden: 'Collapse hidden',
 } as const
 
 export type MessageId = keyof typeof EN
@@ -144,6 +148,10 @@ const ZH_TW: Record<MessageId, string> = {
   stale: '已過期',
   copied: '已複製 {text}，請貼到輸入框',
   copyFailed: '無法填入也無法複製 {text}',
+  hide: '隱藏',
+  unhide: '取消隱藏',
+  showHidden: '顯示已隱藏（{n}）',
+  collapseHidden: '收起已隱藏',
 }
 
 const JA: Record<MessageId, string> = {
@@ -181,6 +189,10 @@ const JA: Record<MessageId, string> = {
   stale: '古い訳文',
   copied: '{text} をコピーしました。入力欄に貼り付けてください',
   copyFailed: '{text} を入力もコピーもできませんでした',
+  hide: '非表示',
+  unhide: '再表示',
+  showHidden: '非表示を表示（{n}）',
+  collapseHidden: '非表示をたたむ',
 }
 
 const ZH_CN: Record<MessageId, string> = {
@@ -218,6 +230,10 @@ const ZH_CN: Record<MessageId, string> = {
   stale: '已过期',
   copied: '已复制 {text}，请粘贴到输入框',
   copyFailed: '无法填入也无法复制 {text}',
+  hide: '隐藏',
+  unhide: '取消隐藏',
+  showHidden: '显示已隐藏（{n}）',
+  collapseHidden: '收起已隐藏',
 }
 
 const DICTS: Record<Lang, Record<MessageId, string>> = { en: EN, 'zh-TW': ZH_TW, ja: JA, 'zh-CN': ZH_CN }

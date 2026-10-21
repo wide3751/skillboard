@@ -50,6 +50,8 @@ export type Recorder = {
   opened: string[]
   closed: string[]
   files: Record<string, FsNode>
+  /** The mod's `$.store` as it left it: what the next session starts from. */
+  store: Record<string, unknown>
   /** The prompt box as the mod left it. */
   draft: () => string
   /** A person editing a file by hand. */
@@ -75,13 +77,13 @@ export function installWorld(on: On, world: World): Recorder {
   let usage = world.usage === undefined ? [] : world.usage
   let draft = world.draft ?? ''
   const shown = new Set<string>()
+  const store: Record<string, unknown> = { ...(world.store ?? {}) }
   const clock = mock.clock(on)
-  mock.store(on, world.store ?? {})
   mock.env(on, { HOME: home, ...(world.env ?? {}) })
 
   const rec: Recorder = {
     jevBodies: [], jevHeaders: [], jevUrls: [], haikuPrompts: [], fills: [], copies: [], toasts: [], writes: [],
-    commands: [], opened: [], closed: [], files,
+    commands: [], opened: [], closed: [], files, store,
     draft: () => draft,
     setDraft: text => { draft = text },
     edit: (path, text) => {
@@ -147,6 +149,16 @@ export function installWorld(on: On, world: World): Recorder {
     return { value: undefined }
   })
 
+  on('store.get', (_, e) => ({ value: store[e.key] }))
+  on('store.set', (_, e) => {
+    store[e.key] = e.value
+    return { value: undefined }
+  })
+  on('store.delete', (_, e) => {
+    delete store[e.key]
+    return { value: undefined }
+  })
+  on('store.keys', () => ({ value: Object.keys(store) }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
   on('session.usage', () => ({
