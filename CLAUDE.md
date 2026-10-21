@@ -10,4 +10,4 @@ Issues 與 spec 放在 GitHub Issues（wide3751/skillboard），用 `gh` CLI 操
 
 ### Domain docs
 
-Single-context：根目錄一份 `CONTEXT.md` + `docs/adr/`。See `docs/agents/domain.md`.
+Single-context：根目錄一份 `GLOSSARY.md` + `docs/adr/`。See `docs/agents/domain.md`.
