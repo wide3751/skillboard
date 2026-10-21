@@ -14,6 +14,8 @@ A **Claude Code plugin**, built on **Claude Code mods**. When you have hundreds 
 
 It works in the Claude Desktop Code tab and in `claude` in a terminal.
 
+https://github.com/user-attachments/assets/4e2d2cb6-3677-441f-bb95-adb55453b98b
+
 The pane has three parts, top to bottom:
 
 | Part | What it shows | Example |

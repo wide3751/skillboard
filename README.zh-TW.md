@@ -14,6 +14,8 @@
 
 Claude Desktop 的 Code 分頁和終端機裡的 `claude` 都能用。
 
+https://github.com/user-attachments/assets/4e2d2cb6-3677-441f-bb95-adb55453b98b
+
 Pane 由上到下分成三部分：
 
 | 部分 | 顯示什麼 | 例子 |
