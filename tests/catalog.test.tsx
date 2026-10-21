@@ -122,6 +122,48 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
+test('skills typed only as /name join their group; commands and /skillboard stay out', async ($, on) => {
+  const rec = installWorld(on, {
+    ...WORLD,
+    files: {
+      ...WORLD.files,
+      '/cache/mp-a/1.3.1/skills/grill-with-docs/SKILL.md': '---\ndescription: Grill against the docs\ndisable-model-invocation: true\n---\n',
+      [`${HOME}/.claude/skills/grill-me/SKILL.md`]: '---\ndescription: Grill me hard\ndisable-model-invocation: true\n---\n',
+      [`${CWD}/.claude/skills/ship/SKILL.md`]: skillMd('Ships this project'),
+      [`${HOME}/.claude/commands/standup.md`]: 'Write a standup.',
+    },
+    commands: [
+      { name: 'help', description: 'Show help', source: 'builtin' },
+      { name: 'mattpocock-skills:tdd', description: 'TDD', source: 'plugin', plugin: 'mattpocock-skills' },
+      { name: 'mattpocock-skills:grill-with-docs', description: 'Grill against the docs', source: 'plugin', plugin: 'mattpocock-skills' },
+      { name: 'old-thing:lint', description: 'A plugin command', source: 'plugin', plugin: 'old-thing' },
+      { name: 'grill-me', description: 'Grill me hard', source: 'user' },
+      { name: 'ship', description: 'Ships this project', source: 'user' },
+      { name: 'standup', description: 'Write a standup', source: 'user' },
+      { name: 'server:prompt', description: 'An MCP prompt', source: 'mcp' },
+    ],
+  })
+  await $.session.start({ cwd: CWD, surface: 'desktop', isInteractive: true })
+  await rec.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: paneProps('dock') })
+  expect((await screen(ui)).split('\n').filter(line => line.startsWith('▸'))).toEqual([
+    '▸ mattpocock-skills 1.3.1 · 3',
+    '▸ old-thing abc1234 · 1',
+    '▸ User 3',
+    '▸ Project 2',
+    '▸ Built-in 1',
+  ])
+  for (const group of ['plugin:mattpocock-skills', 'plugin:old-thing', 'user', 'project', 'builtin']) await ui.press({ key: `group:${group}` })
+  await ui.press({ key: 'skill:plugin:mattpocock-skills|mattpocock-skills:grill-with-docs' })
+  expect(await screen(ui)).toContain('Grill against the docs')
+  await ui.press({ key: 'skill:user|grill-me' })
+  const text = await screen(ui)
+  expect(text).toContain('Grill me hard')
+  expect(text).toContain('  · ship')
+  for (const absent of ['lint', 'standup', 'help', 'skillboard', 'prompt']) expect(text).not.toContain(absent)
+  await ui.unmount()
+})
+
 test('the catalog shows a loading line until the listing is ready, then catches up on submit', async ($, on) => {
   const rec = installWorld(on, { ...WORLD, usage: null })
   await $.session.start({ cwd: CWD, surface: 'terminal', isInteractive: true })

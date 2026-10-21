@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { ContextSkill, EngineInterface } from 'claude-code'
+import type { CommandInfo, ContextSkill, EngineInterface } from 'claude-code'
 import type { PluginInstall, SkillCatalog, SkillEntry, SkillId, Source, SourceGroup, SourceId, Version } from '../types'
 
 const catalog = atom({ plugin: 'skillboard', key: 'catalog' } as const, { status: 'pending' } as SkillCatalog)
@@ -11,8 +11,10 @@ export function readCatalog($: EngineInterface): Promise<SkillCatalog> {
 export type ScanRoots = { cwd: string; home: string }
 
 /**
- * Brings the catalog up to date with the session's skill listing. The listing
- * decides membership, one row per listed skill; the filesystem only supplies
+ * Brings the catalog up to date with the session's skill listing. Membership is
+ * the model's listing plus the slash commands that turn out to be skills: a
+ * skill with `disable-model-invocation` is missing from the model's listing but
+ * still typed as `/name`. One row per name; the filesystem supplies
  * descriptions and versions. An unchanged fingerprint reads no SKILL.md unless
  * `force`. A listing that is not ready leaves the atom as it was.
  */
@@ -20,6 +22,7 @@ export async function refreshCatalog($: EngineInterface, roots: ScanRoots, force
   const usage = await $.session.usage({ breakdown: 'summary' })
   const listed = usage.context.breakdown?.skills?.skillFrontmatter
   if (!listed) return read($, catalog)
+  const commands = await attempt(() => $.command.list(), [] as CommandInfo[])
 
   const installedPath = `${roots.home}/.claude/plugins/installed_plugins.json`
   const [installedText, installedStat, enabled, userDir, projectDir] = await Promise.all([
@@ -32,6 +35,7 @@ export async function refreshCatalog($: EngineInterface, roots: ScanRoots, force
   const fingerprint = JSON.stringify([
     roots,
     listed.map(s => `${s.source}|${s.pluginName ?? ''}|${s.name}`).sort(),
+    commands.map(c => `${c.source}|${c.plugin ?? ''}|${c.name}`).sort(),
     installedStat?.mtimeMs ?? null,
     enabled ?? null,
     userDir.map(d => [d.name, d.mtimeMs]),
@@ -42,8 +46,13 @@ export async function refreshCatalog($: EngineInterface, roots: ScanRoots, force
 
   const installs = parseInstalledPlugins(installedText, roots.cwd, enabled)
   const skillDirs = new Map<string, Promise<string[]>>()
-  const rows = await Promise.all(listed.map(skill => scanSkill($, skill, installs, skillDirs, roots)))
-  const next: SkillCatalog = { status: 'ready', fingerprint, groups: groupRows(rows) }
+  const listedNames = new Set(listed.map(s => s.name))
+  const typedOnly = commands.filter(c => !listedNames.has(c.name)).map(skillOfCommand).filter(s => s !== null)
+  const rows = await Promise.all([
+    ...listed.map(skill => scanSkill($, skill, installs, skillDirs, roots)),
+    ...typedOnly.map(skill => scanSkill($, skill, installs, skillDirs, roots, { requireFile: true })),
+  ])
+  const next: SkillCatalog = { status: 'ready', fingerprint, groups: groupRows(rows.filter(r => r !== null)) }
   await update($, catalog, () => next)
   return next
 }
@@ -56,19 +65,38 @@ async function enabledPlugins($: EngineInterface): Promise<unknown> {
 
 type Row = { source: Source; entry: SkillEntry }
 
+type Candidate = Pick<ContextSkill, 'name' | 'source' | 'pluginName'>
+
+/**
+ * A slash command as the skill it may be: a plugin's `<plugin>:<x>` or a bare
+ * user or project name. The scan decides whether a SKILL.md stands behind it,
+ * and for a bare name whether that file is the user's or the project's.
+ */
+function skillOfCommand(command: CommandInfo): Candidate | null {
+  if (command.source === 'plugin') {
+    const plugin = command.plugin ?? command.name.split(':')[0]!
+    return command.name.startsWith(`${plugin}:`) ? { name: command.name, source: 'plugin', pluginName: plugin } : null
+  }
+  if (command.source === 'user' && !command.name.includes(':')) return { name: command.name, source: 'userSettings' }
+  return null
+}
+
+/** With `requireFile`, a candidate no SKILL.md stands behind is a command and scans to null. */
 async function scanSkill(
   $: EngineInterface,
-  skill: ContextSkill,
+  skill: Candidate,
   installs: ReadonlyMap<string, PluginInstall[]>,
   skillDirs: Map<string, Promise<string[]>>,
   roots: ScanRoots,
-): Promise<Row> {
+  { requireFile = false } = {},
+): Promise<Row | null> {
   if (skill.source === 'plugin' && skill.pluginName) {
     const plugin = skill.pluginName
     const baseName = skill.name.startsWith(`${plugin}:`) ? skill.name.slice(plugin.length + 1) : skill.name
     const all = installs.get(plugin) ?? []
     const located = await Promise.all(all.map(async install => ({ install, path: await locatePluginSkill($, install, baseName, skillDirs) })))
     const shipping = located.filter(l => l.path !== null)
+    if (requireFile && shipping.length === 0) return null
     const first = shipping[0]
     const description = first?.path ? parseDescription(await attempt(() => readText($, first.path!), '')) : ''
     const source: Source = { kind: 'plugin', id: sourceIdOf('plugin', plugin), plugin, installs: all }
@@ -79,8 +107,15 @@ async function scanSkill(
     }
   }
   if (skill.source === 'userSettings' || skill.source === 'projectSettings') {
-    const kind = skill.source === 'userSettings' ? 'user' : 'project'
-    const dir = `${kind === 'user' ? roots.home : roots.cwd}/.claude/skills/${skill.name}`
+    const userDir = `${roots.home}/.claude/skills/${skill.name}`
+    const projectDir = `${roots.cwd}/.claude/skills/${skill.name}`
+    let kind: 'user' | 'project' = skill.source === 'userSettings' ? 'user' : 'project'
+    if (requireFile) {
+      if (await $.fs.exists(`${userDir}/SKILL.md`)) kind = 'user'
+      else if (await $.fs.exists(`${projectDir}/SKILL.md`)) kind = 'project'
+      else return null
+    }
+    const dir = kind === 'user' ? userDir : projectDir
     const [text, version] = await Promise.all([
       attempt(() => readText($, `${dir}/SKILL.md`), ''),
       deriveVersion($, dir, roots.home),

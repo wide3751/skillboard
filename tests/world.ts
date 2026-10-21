@@ -2,7 +2,7 @@
 // the session's skill listing, Jev, Haiku, the prompt box); installWorld answers
 // every engine call the mod makes from it and records what the mod sent.
 import { mock } from 'claude-code/testing'
-import type { ContextSkill, On } from 'claude-code'
+import type { CommandInfo, ContextSkill, On } from 'claude-code'
 
 export type FsNode = string | { link: string }
 
@@ -22,6 +22,8 @@ export type World = {
   mtimes?: Record<string, number>
   /** The session's skill listing; null means the breakdown is not ready yet. */
   usage?: readonly ContextSkill[] | null
+  /** The slash commands besides the ones the mod registers itself. */
+  commands?: readonly CommandInfo[]
   enabledPlugins?: Record<string, boolean>
   settingsLanguage?: string
   env?: { LANG?: string; LC_ALL?: string }
@@ -167,6 +169,12 @@ export function installWorld(on: On, world: World): Recorder {
     rec.commands.push(e.name)
     return { value: { command: e.name } }
   })
+  on('command.list', () => ({
+    value: [
+      ...(world.commands ?? []),
+      ...rec.commands.map(name => ({ name, description: '', source: 'plugin' as const, plugin: 'skillboard' })),
+    ],
+  }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
   on('prompt.read', () => ({ value: { text: draft, cursor: draft.length } }))
   on('prompt.fill', (_, e) => {
