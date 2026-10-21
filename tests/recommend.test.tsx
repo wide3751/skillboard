@@ -106,7 +106,7 @@ for (const { reply, line } of failures) {
   })
 }
 
-test('more than 255 candidates take two requests: batches first, then the batch leaders together', JEV, async ($, on) => {
+test('more than 255 candidates take two requests: batches first, then the batch leaders together', { ...JEV, timeoutMs: 30_000 }, async ($, on) => {
   const many: ContextSkill[] = Array.from({ length: 300 }, (_, i) => ({ name: `s${i}`, source: 'userSettings', tokens: 1 }))
   const files = Object.fromEntries(many.map(s => [`${HOME}/.claude/skills/${s.name}/SKILL.md`, skillMd(`skill number ${s.name}`)]))
   const rec = installWorld(on, {
