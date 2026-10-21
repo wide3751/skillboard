@@ -41,6 +41,7 @@ export type Recorder = {
   copies: string[]
   toasts: string[]
   writes: { path: string; text: string }[]
+  reads: string[]
   scrolls: unknown[]
   commands: string[]
   opened: string[]
@@ -69,7 +70,7 @@ export function installWorld(on: On, world: World): Recorder {
   mock.env(on, { HOME: home, ...(world.env ?? {}) })
 
   const rec: Recorder = {
-    jevBodies: [], jevHeaders: [], haikuPrompts: [], fills: [], copies: [], toasts: [], writes: [], scrolls: [],
+    jevBodies: [], jevHeaders: [], haikuPrompts: [], fills: [], copies: [], toasts: [], writes: [], reads: [], scrolls: [],
     commands: [], opened: [], closed: [], files,
     draft: () => draft,
     settle: () => clock.settle(),
@@ -93,6 +94,7 @@ export function installWorld(on: On, world: World): Recorder {
   }
 
   on('fs.read', (_, e) => {
+    rec.reads.push(JSON.stringify(e))
     const node = files[resolve(e.path)]
     return typeof node === 'string' ? { value: node } : { deny: `ENOENT: ${e.path}` }
   })
@@ -235,3 +237,30 @@ export const paneProps = (placement: 'dock' | 'inline', bodyRows = 40) => ({
 export const SURFACES = ['terminal', 'desktop', 'mobile'] as const
 
 export const skillMd = (description: string) => `---\nname: x\ndescription: ${description}\n---\n\nBody.\n`
+
+type Node = { type?: string; props?: Record<string, unknown>; children?: unknown[] } | string | null | undefined
+
+/** The drawing as lines of text, roughly as a terminal shows it: a row Box joins its parts on one line. */
+export async function screen(ui: { drawn: () => Promise<unknown> }): Promise<string> {
+  const inline = (node: Node): string => {
+    if (node === null || node === undefined) return ''
+    if (typeof node === 'string') return node
+    return (node.children ?? []).map(child => inline(child as Node)).join('')
+  }
+  const lines = (node: Node): string[] => {
+    if (node === null || node === undefined) return []
+    if (typeof node === 'string') return [node]
+    const children = (node.children ?? []) as Node[]
+    switch (node.type) {
+      case 'Text': return [inline(node)]
+      case 'Button': return [children.length > 0 ? inline(node) : String(node.props?.label ?? '')]
+      case 'Input': return [`[? ${String(node.props?.value || node.props?.placeholder || '')}]`]
+      case 'Select': return [`<${String(node.props?.value ?? '')}>`]
+      default: {
+        const parts = children.flatMap(lines)
+        return node.props?.flexDirection === 'row' ? [parts.join(' ')] : parts
+      }
+    }
+  }
+  return lines((await ui.drawn()) as Node).join('\n')
+}
