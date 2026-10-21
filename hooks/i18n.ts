@@ -14,7 +14,7 @@ const STORE_KEY = 'language'
 /**
  * The pane's own choice wins while userConfig.language still holds the value
  * it was made under; after that userConfig, Claude Code's `language` setting,
- * LC_ALL, LANG, then English.
+ * LC_ALL, LANG, the macOS preferred language, then English.
  */
 export async function resolveLanguage($: EngineInterface, option: Lang | null): Promise<Lang> {
   const stored = (await $.store.get(STORE_KEY)) as Partial<StoredLanguageChoice> | undefined
@@ -25,6 +25,7 @@ export async function resolveLanguage($: EngineInterface, option: Lang | null): 
     matchLang(settings.language) ??
     matchLang(await $.env.get('LC_ALL')) ??
     matchLang(await $.env.get('LANG')) ??
+    matchLang(await macLanguage($)) ??
     'en'
   await update($, language, () => lang)
   return lang
@@ -34,6 +35,21 @@ export async function chooseLanguage($: EngineInterface, lang: Lang, option: Lan
   const choice: StoredLanguageChoice = { lang, configWas: option }
   await $.store.set(STORE_KEY, choice)
   await update($, language, () => lang)
+}
+
+/**
+ * The first of the person's preferred languages in System Settings, as
+ * `defaults` prints it: `(\n    "zh-Hant-TW",\n    "en-US"\n)`. The Desktop app
+ * starts sessions with no LANG, and `Intl` in a hooks module answers en-US
+ * whatever the system is set to, so only macOS itself can say.
+ */
+async function macLanguage($: EngineInterface): Promise<string | null> {
+  try {
+    const { exitCode, stdout } = await $.process.run(['defaults', 'read', '-g', 'AppleLanguages'], { timeoutMs: 3000 })
+    return exitCode === 0 ? (/^\s*"?([A-Za-z][\w-]*)"?,?\s*$/m.exec(stdout)?.[1] ?? null) : null
+  } catch {
+    return null
+  }
 }
 
 const LANGS: readonly Lang[] = ['zh-TW', 'en', 'ja', 'zh-CN']

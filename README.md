@@ -36,7 +36,7 @@ claude plugin install skillboard --marketplace wide3751/skillboard
 | `jevApiKey` | 空白 | TypeSafe Jev 的 API key，存在安全儲存區，不會以明文顯示。留空就不做建議。 |
 | `threshold` | `0.1` | 建議的最低機率。低於門檻的 skill 不顯示；全部低於門檻時顯示「沒有特別適合的 skill」。 |
 | `autoRecommend` | 開 | 每次送出 prompt 時自動向 Jev 要建議。關掉後只在按「重新建議」時才送出。 |
-| `language` | `auto` | 介面語言。`auto` 依序參考 Claude Code 的 `language` 設定、`LC_ALL`、`LANG`，都沒有就用 English。也可以直接在 pane 上切換。 |
+| `language` | `auto` | 介面語言。`auto` 依序參考 Claude Code 的 `language` 設定、`LC_ALL`、`LANG`、macOS 的偏好語言，都沒有就用 English。也可以直接在 pane 上切換。 |
 
 ## 隱私
 

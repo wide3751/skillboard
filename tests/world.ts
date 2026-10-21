@@ -27,6 +27,8 @@ export type World = {
   enabledPlugins?: Record<string, boolean>
   settingsLanguage?: string
   env?: { LANG?: string; LC_ALL?: string }
+  /** macOS's preferred languages, first first; absent, `defaults` is not there to run. */
+  appleLanguages?: readonly string[]
   store?: Record<string, unknown>
   jev?: (body: JevBody, call: number) => JevReply | Promise<JevReply>
   haiku?: (prompt: string, system: string) => string | 'api-error'
@@ -168,6 +170,13 @@ export function installWorld(on: On, world: World): Recorder {
   on('command.register', (_, e) => {
     rec.commands.push(e.name)
     return { value: { command: e.name } }
+  })
+  on('process.run', (_, e) => {
+    if (world.appleLanguages === undefined || e.argv.join(' ') !== 'defaults read -g AppleLanguages') {
+      return { deny: `cannot run ${e.argv[0]}` }
+    }
+    const stdout = `(\n${world.appleLanguages.map(l => `    "${l}"`).join(',\n')}\n)\n`
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('command.list', () => ({
     value: [
