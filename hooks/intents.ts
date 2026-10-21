@@ -3,11 +3,12 @@
 import type { EngineInterface, RenderSurface } from 'claude-code'
 import { changeBrowse, readBrowse } from './browse'
 import { readCatalog, refreshCatalog, type ScanRoots } from './catalog'
-import { readLanguage } from './i18n'
+import { fillSkill } from './fill'
+import { readLanguage, t } from './i18n'
 import { readRecommendation, recommend } from './recommend'
 import { readTranslations } from './translate'
 import { PANE_ID, keyOf, matchesQuery } from './view'
-import type { Intent, SkillboardOptions } from '../types'
+import type { Intent, SkillCatalog, SkillEntry, SkillId, SkillboardOptions } from '../types'
 
 export type DispatchContext = {
   options: SkillboardOptions
@@ -48,9 +49,17 @@ export async function dispatch($: EngineInterface, intent: Intent, surface: Rend
       if (prompt.trim() !== '') await recommend($, await readCatalog($), prompt, ctx.options.jevApiKey)
       return
     }
+    case 'fill': {
+      const skill = findSkill(await readCatalog($), intent.skillId)
+      if (skill) await fillSkill($, skill.name, surface, t(await readLanguage($)))
+      return
+    }
     case 'translate':
-    case 'fill':
     case 'setLang':
       return
   }
+}
+
+function findSkill(catalog: SkillCatalog, id: SkillId): SkillEntry | undefined {
+  return catalog.status === 'ready' ? catalog.groups.flatMap(g => g.skills).find(s => s.id === id) : undefined
 }
